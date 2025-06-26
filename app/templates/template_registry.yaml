@@ -1,0 +1,83 @@
+sliding_window:
+  signature: "def max_subarray_sum(arr: List[int], k: int) -> int:"
+  method: "Use sliding window of size k to maintain running sum."
+  edge_cases: "Check if k > len(arr); handle negative integers."
+  keywords: ["max subarray", "window", "length k", "fixed window", "sliding window"]
+
+binary_search:
+  signature: "def search(nums: List[int], target: int) -> int:"
+  method: "Use binary search on sorted array."
+  edge_cases: "Empty array, duplicates, out-of-bound target."
+  keywords: ["sorted", "find element", "search in array", "binary search", "log n"]
+
+backtracking:
+  signature: "def solve_n_queens(n: int) -> List[List[str]]:"
+  method: "Use recursion and backtracking to explore all configurations."
+  edge_cases: "n=1 or n=0, prune invalid paths early."
+  keywords: ["permutations", "combinations", "choices", "recursion", "backtrack"]
+
+two_pointer:
+  signature: "def two_sum(nums: List[int], target: int) -> List[int]:"
+  method: "Use two pointers to scan from both ends."
+  edge_cases: "Duplicates, negative numbers, empty array."
+  keywords: ["two pointer", "pair sum", "left right", "move pointers"]
+
+bfs:
+  signature: "def bfs(graph: Dict[int, List[int]], start: int) -> List[int]:"
+  method: "Use queue to traverse graph level by level."
+  edge_cases: "Disconnected graph, cycles."
+  keywords: ["bfs", "breadth first", "level order", "queue"]
+
+dfs:
+  signature: "def dfs(graph: Dict[int, List[int]], start: int) -> List[int]:"
+  method: "Use stack or recursion to traverse graph depth-wise."
+  edge_cases: "Disconnected graph, cycles, stack overflow."
+  keywords: ["dfs", "depth first", "recursion", "stack"]
+
+dp:
+  signature: "def coin_change(coins: List[int], amount: int) -> int:"
+  method: "Use dynamic programming to build up solutions."
+  edge_cases: "No solution, zero amount, large input."
+  keywords: ["dp", "dynamic programming", "memoization", "tabulation"]
+
+greedy:
+  signature: "def longest_subsequence(s: str, k: int) -> int:"
+  method: "Iterate from least significant bit, greedily include bits as long as value <= k."
+  edge_cases: "All zeros, k smaller than any digit, large k."
+  keywords: ["greedy", "maximize", "longest", "subsequence", "less than or equal to", "binary string", "include as many as possible", "pick maximum", "optimal choice", "choose best", "minimize cost", "maximize value"]
+
+bitmasking:
+  signature: "def count_subsequences_with_property(s: str, k: int) -> int:"
+  method: "Use bitmasking to enumerate or check subsequences, especially for binary strings."
+  edge_cases: "Large n, k=0, all ones or zeros."
+  keywords: ["bitmask", "bitmasking", "binary string", "power of two", "subsequence", "set bits", "unset bits", "bitwise", "mask", "enumerate subsets", "binary representation", "bit manipulation", "bit operations"]
+
+greedy:
+  signature: "def activity_selection(activities: List[Tuple[int, int]]) -> int:"
+  method: "Sort by end time and select non-overlapping intervals."
+  edge_cases: "Overlapping intervals, empty input."
+  keywords: ["greedy", "earliest finish", "interval scheduling"]
+
+heap:
+  signature: "def find_kth_largest(nums: List[int], k: int) -> int:"
+  method: "Use min-heap of size k to track largest elements."
+  edge_cases: "k > len(nums), duplicates."
+  keywords: ["heap", "priority queue", "kth largest", "min heap", "max heap"]
+
+hashmap:
+  signature: "def two_sum(nums: List[int], target: int) -> List[int]:"
+  method: "Use hashmap to store complements."
+  edge_cases: "Duplicates, negative numbers."
+  keywords: ["hashmap", "dictionary", "map", "lookup", "complement"]
+
+palindrome:
+  signature: "def is_palindrome(s: str) -> bool:"
+  method: "Use two-pointer technique and ignore case sensitivity."
+  edge_cases: "Handle empty strings and non-alphanumeric characters."
+  keywords: ["palindrome", "reverse string", "same forwards backwards"]
+
+default:
+  signature: "def solution():"
+  method: "Choose the optimal algorithm or data structure."
+  edge_cases: "Handle empty input and large inputs."
+  keywords: [] 
