@@ -143,7 +143,7 @@ if st.button("Submit", use_container_width=True):
             structured = task_understanding_node(user_input)
             st.json(structured)
             st.markdown("---")
-            st.markdown("### :rocket: Final Structured Prompt")
+            st.markdown("### Final Structured Prompt")
             st.code(structured.get("structured_prompt", "[No prompt generated]"), language="markdown")
         except Exception as e:
             st.error(f"An error occurred: {e}")
