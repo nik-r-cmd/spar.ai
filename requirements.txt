@@ -6,4 +6,5 @@ transformers
 huggingface_hub
 openai
 pytest
+textblob>=0.17.1
 

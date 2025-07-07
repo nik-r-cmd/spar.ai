@@ -2,49 +2,49 @@ sliding_window:
   signature: "def max_subarray_sum(arr: List[int], k: int) -> int:"
   method: "Use sliding window of size k to maintain running sum."
   edge_cases: "Check if k > len(arr); handle negative integers."
-  keywords: ["max subarray", "window", "length k", "fixed window", "sliding window"]
+  keywords: ["max subarray", "window", "length k", "fixed window", "sliding window", "contiguous sum", "subarray sum", "moving window"]
 
 binary_search:
   signature: "def search(nums: List[int], target: int) -> int:"
   method: "Use binary search on sorted array."
   edge_cases: "Empty array, duplicates, out-of-bound target."
-  keywords: ["sorted", "find element", "search in array", "binary search", "log n"]
+  keywords: ["sorted", "find element", "search in array", "binary search", "log n", "find index", "lower bound", "upper bound", "search position"]
 
 backtracking:
   signature: "def solve_n_queens(n: int) -> List[List[str]]:"
   method: "Use recursion and backtracking to explore all configurations."
   edge_cases: "n=1 or n=0, prune invalid paths early."
-  keywords: ["permutations", "combinations", "choices", "recursion", "backtrack"]
+  keywords: ["permutations", "combinations", "choices", "recursion", "backtrack", "explore all", "try all", "generate all", "dfs all"]
 
 two_pointer:
   signature: "def two_sum(nums: List[int], target: int) -> List[int]:"
   method: "Use two pointers to scan from both ends."
   edge_cases: "Duplicates, negative numbers, empty array."
-  keywords: ["two pointer", "pair sum", "left right", "move pointers"]
+  keywords: ["two pointer", "pair sum", "left right", "move pointers", "start end", "scan from both ends", "meet in the middle"]
 
 bfs:
   signature: "def bfs(graph: Dict[int, List[int]], start: int) -> List[int]:"
   method: "Use queue to traverse graph level by level."
   edge_cases: "Disconnected graph, cycles."
-  keywords: ["bfs", "breadth first", "level order", "queue"]
+  keywords: ["bfs", "breadth first", "level order", "queue", "shortest path unweighted", "visit neighbors"]
 
 dfs:
   signature: "def dfs(graph: Dict[int, List[int]], start: int) -> List[int]:"
   method: "Use stack or recursion to traverse graph depth-wise."
   edge_cases: "Disconnected graph, cycles, stack overflow."
-  keywords: ["dfs", "depth first", "recursion", "stack"]
+  keywords: ["dfs", "depth first", "recursion", "stack", "explore deep", "visit all paths"]
 
 dp:
   signature: "def coin_change(coins: List[int], amount: int) -> int:"
   method: "Use dynamic programming to build up solutions."
   edge_cases: "No solution, zero amount, large input."
-  keywords: ["dp", "dynamic programming", "memoization", "tabulation"]
+  keywords: ["dp", "dynamic programming", "memoization", "tabulation", "overlapping subproblems", "optimal substructure", "cache results", "bottom up", "top down"]
 
 greedy:
-  signature: "def longest_subsequence(s: str, k: int) -> int:"
-  method: "Iterate from least significant bit, greedily include bits as long as value <= k."
-  edge_cases: "All zeros, k smaller than any digit, large k."
-  keywords: ["greedy", "maximize", "longest", "subsequence", "less than or equal to", "binary string", "include as many as possible", "pick maximum", "optimal choice", "choose best", "minimize cost", "maximize value"]
+  signature: "def activity_selection(activities: List[Tuple[int, int]]) -> int:"
+  method: "Sort by end time and select non-overlapping intervals."
+  edge_cases: "Overlapping intervals, empty input."
+  keywords: ["greedy", "earliest finish", "interval scheduling", "pick maximum", "choose best", "minimize cost", "maximize value", "locally optimal"]
 
 bitmasking:
   signature: "def count_subsequences_with_property(s: str, k: int) -> int:"
@@ -52,29 +52,71 @@ bitmasking:
   edge_cases: "Large n, k=0, all ones or zeros."
   keywords: ["bitmask", "bitmasking", "binary string", "power of two", "subsequence", "set bits", "unset bits", "bitwise", "mask", "enumerate subsets", "binary representation", "bit manipulation", "bit operations"]
 
-greedy:
-  signature: "def activity_selection(activities: List[Tuple[int, int]]) -> int:"
-  method: "Sort by end time and select non-overlapping intervals."
-  edge_cases: "Overlapping intervals, empty input."
-  keywords: ["greedy", "earliest finish", "interval scheduling"]
-
 heap:
   signature: "def find_kth_largest(nums: List[int], k: int) -> int:"
   method: "Use min-heap of size k to track largest elements."
   edge_cases: "k > len(nums), duplicates."
-  keywords: ["heap", "priority queue", "kth largest", "min heap", "max heap"]
+  keywords: ["heap", "priority queue", "kth largest", "min heap", "max heap", "extract min", "extract max", "heapify"]
 
 hashmap:
   signature: "def two_sum(nums: List[int], target: int) -> List[int]:"
   method: "Use hashmap to store complements."
   edge_cases: "Duplicates, negative numbers."
-  keywords: ["hashmap", "dictionary", "map", "lookup", "complement"]
+  keywords: ["hashmap", "dictionary", "map", "lookup", "complement", "store indices", "frequency map", "count occurrences"]
 
 palindrome:
   signature: "def is_palindrome(s: str) -> bool:"
   method: "Use two-pointer technique and ignore case sensitivity."
   edge_cases: "Handle empty strings and non-alphanumeric characters."
-  keywords: ["palindrome", "reverse string", "same forwards backwards"]
+  keywords: ["palindrome", "reverse string", "same forwards backwards", "check palindrome", "mirror"]
+
+sorting:
+  signature: "def sort_array(arr: List[int]) -> List[int]:"
+  method: "Use an efficient sorting algorithm (merge sort, quick sort, etc.)."
+  edge_cases: "Already sorted, reverse sorted, duplicates, empty array."
+  keywords: ["sort", "sorted", "order", "ascending", "descending", "arrange", "rearrange", "merge sort", "quick sort", "bubble sort", "selection sort", "insertion sort", "heap sort", "counting sort", "radix sort", "bucket sort"]
+
+union_find:
+  signature: "def find_circle_num(isConnected: List[List[int]]) -> int:"
+  method: "Use union-find (disjoint set) to group connected components."
+  edge_cases: "Disconnected nodes, self-loops."
+  keywords: ["union find", "disjoint set", "connected components", "find parent", "union operation", "path compression", "merge sets"]
+
+segment_tree:
+  signature: "class SegmentTree: ..."
+  method: "Use segment tree for efficient range queries and updates."
+  edge_cases: "Large range, point updates, range updates."
+  keywords: ["segment tree", "range query", "range update", "interval tree", "query sum", "query min", "query max", "build tree", "update tree"]
+
+trie:
+  signature: "class Trie: ..."
+  method: "Use trie (prefix tree) for efficient string/prefix queries."
+  edge_cases: "Empty string, duplicate words."
+  keywords: ["trie", "prefix tree", "insert word", "search word", "starts with", "autocomplete", "dictionary tree"]
+
+stack:
+  signature: "def evaluate_expression(expr: str) -> int:"
+  method: "Use stack to evaluate or process expressions."
+  edge_cases: "Mismatched parentheses, empty stack."
+  keywords: ["stack", "push", "pop", "last in first out", "evaluate expression", "parentheses matching", "reverse stack"]
+
+queue:
+  signature: "def process_tasks(tasks: List[int]) -> List[int]:"
+  method: "Use queue to process tasks in order."
+  edge_cases: "Empty queue, circular queue."
+  keywords: ["queue", "enqueue", "dequeue", "first in first out", "process in order", "task scheduling"]
+
+recursion:
+  signature: "def factorial(n: int) -> int:"
+  method: "Use recursion to solve the problem."
+  edge_cases: "Base case, stack overflow."
+  keywords: ["recursion", "recursive", "base case", "call itself", "divide problem", "break into subproblems"]
+
+divide_and_conquer:
+  signature: "def merge_sort(arr: List[int]) -> List[int]:"
+  method: "Use divide and conquer to break problem into subproblems."
+  edge_cases: "Single element, empty array."
+  keywords: ["divide and conquer", "split array", "merge results", "combine solutions", "recursive split", "conquer subproblems"]
 
 default:
   signature: "def solution():"
