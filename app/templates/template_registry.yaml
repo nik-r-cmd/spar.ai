@@ -122,4 +122,60 @@ default:
   signature: "def solution():"
   method: "Choose the optimal algorithm or data structure."
   edge_cases: "Handle empty input and large inputs."
-  keywords: [] 
+  keywords: []
+
+test_case_patterns:
+  # Patterns to help extract test cases from prompts
+  regexes:
+    - "example[s]?:?\\s*(input|output)?"
+    - "test case[s]?:?"
+    - "input:?"
+    - "output:?"
+    - "expected:?"
+    - "given:?"
+    - "returns?:?"
+    - "should return:?"
+    - "assert:?"
+  keywords:
+    - "example"
+    - "test case"
+    - "input"
+    - "output"
+    - "expected"
+    - "given"
+    - "returns"
+    - "should return"
+    - "assert"
+
+constraint_patterns:
+  # Additional patterns for constraints
+  regexes:
+    - "at most\\s*\\d+"
+    - "at least\\s*\\d+"
+    - "no more than\\s*\\d+"
+    - "not less than\\s*\\d+"
+    - "must be unique"
+    - "must be sorted"
+    - "must be positive"
+    - "must be negative"
+    - "must be non-negative"
+    - "must be non-zero"
+    - "must be even"
+    - "must be odd"
+    - "cannot be empty"
+    - "cannot contain duplicates"
+    - "must be contiguous"
+    - "must be consecutive"
+  keywords:
+    - "unique"
+    - "sorted"
+    - "positive"
+    - "negative"
+    - "non-negative"
+    - "non-zero"
+    - "even"
+    - "odd"
+    - "empty"
+    - "duplicates"
+    - "contiguous"
+    - "consecutive" 

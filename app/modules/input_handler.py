@@ -33,6 +33,24 @@ def load_method_keywords() -> dict:
         templates = yaml.safe_load(f)
     return {k: v.get('keywords', []) for k, v in templates.items() if 'keywords' in v}
 
+def load_test_case_patterns() -> dict:
+    """
+    Load test case patterns from the template registry YAML file.
+    Returns a dict with 'regexes' and 'keywords'.
+    """
+    with open(TEMPLATE_REGISTRY_PATH, 'r', encoding='utf-8') as f:
+        templates = yaml.safe_load(f)
+    return templates.get('test_case_patterns', {})
+
+def load_constraint_patterns() -> dict:
+    """
+    Load constraint patterns from the template registry YAML file.
+    Returns a dict with 'regexes' and 'keywords'.
+    """
+    with open(TEMPLATE_REGISTRY_PATH, 'r', encoding='utf-8') as f:
+        templates = yaml.safe_load(f)
+    return templates.get('constraint_patterns', {})
+
 def extract_explicit_method(prompt: str) -> str:
     """
     Extract the explicit method mentioned in the prompt, if any.
@@ -56,9 +74,27 @@ def extract_explicit_method(prompt: str) -> str:
                     return method_name
     return "Not specified"
 
+def extract_test_cases(prompt: str) -> str:
+    """
+    Extract test cases from the prompt using regexes and keywords from the template registry.
+    Returns a string with extracted test cases or 'Not specified'.
+    """
+    patterns = load_test_case_patterns()
+    regexes = patterns.get('regexes', [])
+    keywords = patterns.get('keywords', [])
+    test_cases = []
+    for regex in regexes:
+        matches = re.findall(regex, prompt, re.IGNORECASE)
+        for match in matches:
+            test_cases.append(match if isinstance(match, str) else ' '.join(match))
+    for keyword in keywords:
+        if keyword in prompt.lower():
+            test_cases.append(keyword)
+    return ', '.join(set(test_cases)) if test_cases else 'Not specified'
+
 def extract_constraints(prompt: str) -> str:
     """
-    Extract constraints (e.g., time/space) from the prompt, if any.
+    Extract constraints (e.g., time/space, additional patterns) from the prompt, if any.
     Returns the constraint string or "Not specified".
     """
     constraints = []
@@ -104,7 +140,18 @@ def extract_constraints(prompt: str) -> str:
         constraints.append("positive integers")
     if re.search(r'negative\s+numbers', prompt, re.IGNORECASE):
         constraints.append("negative numbers")
-    return ", ".join(constraints) if constraints else "Not specified"
+    # Additional patterns from template registry
+    patterns = load_constraint_patterns()
+    regexes = patterns.get('regexes', [])
+    keywords = patterns.get('keywords', [])
+    for regex in regexes:
+        matches = re.findall(regex, prompt, re.IGNORECASE)
+        for match in matches:
+            constraints.append(match if isinstance(match, str) else ' '.join(match))
+    for keyword in keywords:
+        if keyword in prompt.lower():
+            constraints.append(keyword)
+    return ", ".join(set(constraints)) if constraints else "Not specified"
 
 task_history: List[Dict] = []
 
@@ -137,7 +184,7 @@ def preprocess_user_input(prompt: str) -> dict:
 
 def get_user_input(problem_text: str, language: str) -> dict:
     """
-    Process user input: clean, correct typos, detect ambiguities, extract method and constraints.
+    Process user input: clean, correct typos, detect ambiguities, extract method, constraints, and test cases.
     Returns a dict with all processed fields.
     """
     preprocess_result = preprocess_user_input(problem_text)
@@ -146,6 +193,7 @@ def get_user_input(problem_text: str, language: str) -> dict:
     ambiguity_flags = preprocess_result["ambiguity_flags"]
     method = extract_explicit_method(cleaned_prompt)
     constraints = extract_constraints(cleaned_prompt)
+    test_cases = extract_test_cases(cleaned_prompt)
     entry = {
         "timestamp": datetime.now().isoformat(),
         "original_prompt": problem_text,
@@ -154,7 +202,8 @@ def get_user_input(problem_text: str, language: str) -> dict:
         "ambiguity_flags": ambiguity_flags,
         "language": language,
         "method": method,
-        "constraints": constraints
+        "constraints": constraints,
+        "test_cases": test_cases
     }
     task_history.append(entry)
     return {
@@ -164,7 +213,8 @@ def get_user_input(problem_text: str, language: str) -> dict:
         "ambiguity_flags": ambiguity_flags,
         "language": language,
         "method": method,
-        "constraints": constraints
+        "constraints": constraints,
+        "test_cases": test_cases
     }
 
 class Subtask:
@@ -229,41 +279,19 @@ class SubtaskDistributor:
 
     def llm_classify_task(self, prompt: str) -> tuple[dict | None, bool]:
         """
-        Classify task complexity using LLM, with fallback.
+        Classify task complexity using heuristic only (no microservice call).
         Returns (result, fallback_used).
         """
-        if LLM_MODE == LLMMode.HEURISTIC_ONLY:
-            return None, True  # Fallback used
-        if LLM_MODE == LLMMode.MOCK:
-            # Always return 'simple' for mock
-            return {'classification': 'simple'}, True
-        try:
-            response = requests.post('http://127.0.0.1:5005/classify', json={'prompt': prompt}, timeout=30)
-            return response.json(), False
-        except Exception as e:
-            logging.error(f"LLM classify error: {e}", exc_info=True)
-            if LLM_MODE == LLMMode.LLM_ONLY:
-                raise RuntimeError("LLM unavailable and LLM_ONLY mode is set.")
-            return None, True  # Fallback used
+        # Always use heuristic fallback
+        return None, True  # Fallback used
 
     def llm_decompose_task(self, prompt: str) -> tuple[dict | None, bool]:
         """
-        Decompose task into subtasks using LLM, with fallback.
+        Decompose task into subtasks using heuristic only (no microservice call).
         Returns (result, fallback_used).
         """
-        if LLM_MODE == LLMMode.HEURISTIC_ONLY:
-            return None, True
-        if LLM_MODE == LLMMode.MOCK:
-            # Always return a single mock subtask
-            return {'subtasks': [{'name': 'MockSubtask', 'description': prompt, 'depends_on': []}]}, True
-        try:
-            response = requests.post('http://127.0.0.1:5005/decompose', json={'prompt': prompt}, timeout=60)
-            return response.json(), False
-        except Exception as e:
-            logging.error(f"LLM decompose error: {e}", exc_info=True)
-            if LLM_MODE == LLMMode.LLM_ONLY:
-                raise RuntimeError("LLM unavailable and LLM_ONLY mode is set.")
-            return None, True
+        # Always use heuristic fallback
+        return None, True
 
     def is_complex_task(self, prompt: str) -> tuple[bool, bool]:
         """

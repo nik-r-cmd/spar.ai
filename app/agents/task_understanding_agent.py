@@ -149,8 +149,14 @@ def generate_structured_prompt(task_data: Dict) -> Dict:
         f"# Task: {original_prompt}\n"
         f"# Signature: {template_data['signature']}\n"
         f"# Method: {template_data['method']}\n"
-        f"# Edge Cases: {template_data['edge_cases']}"
+        f"# Edge Cases: {template_data['edge_cases']}\n"
+        f"# Constraints: {task_data.get('constraints', 'Not specified')}\n"
+        f"# Instructions: Add inline error handling for all possible runtime errors and invalid inputs. Handle all listed edge cases explicitly in the code. Ensure the solution is robust and covers edge scenarios."
     )
+    # Optionally include test cases if present
+    test_cases = task_data.get('test_cases', None)
+    if test_cases and test_cases != 'Not specified':
+        prompt += f"\n# Test Cases: {test_cases}"
     
     return {
         "structured_prompt": prompt,

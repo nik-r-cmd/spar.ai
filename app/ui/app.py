@@ -13,6 +13,7 @@ import traceback
 import asyncio
 import json
 from app.modules.orchestrator import orchestrate_dag
+import requests
 
 # Page configuration
 st.set_page_config(
@@ -247,61 +248,27 @@ if send_clicked and prompt_text.strip():
         st.markdown("**Step 2: TaskUnderstandingAgent generating structured prompt...**")
         structured = task_understanding_node(user_input)
         st.json(structured)
-        from app.modules.input_handler import SubtaskDistributor
         st.markdown("---")
         st.markdown("### SubtaskDistributor: Task Routing & Decomposition")
         st.markdown("This module decides if your problem is atomic (simple) or needs to be split into subtasks (complex). See below how your problem is routed:")
-        distributor = SubtaskDistributor()
-        subtask_output, fallback_used = distributor.distribute_task(structured)
-        dag_dict = subtask_output.to_dict()
-        if fallback_used:
-            st.warning("LLM unavailable or LLM mode set to heuristic/mock. Heuristic fallback was used for task classification/decomposition.")
-        if len(dag_dict) == 1:
-            st.success("**Task classified as SIMPLE.**\n\nIt will be sent directly to the next agent.")
-            for sub in dag_dict.values():
-                st.json(sub)
+        # --- NEW: Call backend API for LLM output ---
+        backend_url = "http://localhost:8000/api/solve"  # Change if backend is on a different host
+        response = requests.post(backend_url, json={"user_prompt": problem_text, "language": lang}, timeout=120)
+        if response.status_code == 200:
+            llm_result = response.json()
+            st.markdown(f"**Classification:** {llm_result.get('classification')}")
+            st.markdown(f"**Explanation:** {llm_result.get('explanation')}")
+            if llm_result.get('subtasks'):
+                st.markdown("**Subtasks:**")
+                for sub in llm_result['subtasks']:
+                    st.markdown(f"- {sub['step']}: {sub['description']}")
+            st.markdown("**Raw LLM Response:**")
+            st.code(llm_result.get('llm_response', ''), language="text")
         else:
-            st.info("**Task classified as COMPLEX.**\n\nIt will be split into the following subtasks (DAG):")
-            for sub in dag_dict.values():
-                st.markdown(f"**{sub['name']}** (depends on: {', '.join(sub['depends_on']) if sub['depends_on'] else 'None'})")
-                st.code(sub['prompt'], language="text")
+            st.error(f"Backend error: {response.text}")
         st.markdown("---")
-        st.markdown("### Orchestration: Subtask Execution & Progress")
-        progress_placeholder = st.empty()
-        results_placeholder = st.empty()
-        export_placeholder = st.empty()
-        async def simple_executor(subtask):
-            import random
-            import asyncio
-            await asyncio.sleep(random.uniform(0.5, 1.5))
-            subtask.result = f"Result for {subtask.name}"
-        def run_orchestration():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            dag = subtask_output
-            progress = {name: sub.status for name, sub in dag.subtasks.items()}
-            def update_ui(dag):
-                progress = {name: sub.status for name, sub in dag.subtasks.items()}
-                progress_placeholder.write(f"**Progress:** {json.dumps(progress)}")
-                results = {name: sub.result for name, sub in dag.subtasks.items() if sub.result}
-                if results:
-                    results_placeholder.write("**Intermediate Results:**")
-                    results_placeholder.json(results)
-            final_dag = loop.run_until_complete(
-                orchestrate_dag(dag, simple_executor, update_callback=update_ui)
-            )
-            loop.close()
-            return final_dag
-        if st.button("Run Subtasks", use_container_width=True):
-            final_dag = run_orchestration()
-            st.success("All subtasks executed. See results below.")
-            st.json(final_dag.to_dict())
-            export_placeholder.download_button(
-                label="Export Results as JSON",
-                data=json.dumps(final_dag.to_dict(), indent=2),
-                file_name="subtask_results.json",
-                mime="application/json"
-            )
+        # (Optional) You can keep the orchestration/progress UI below if you want
+        # Removed orchestration/progress UI since subtask_output and dag_dict are no longer used
     except Exception as e:
         st.error(f"An error occurred: {e}")
         st.code(traceback.format_exc(), language="python")

@@ -1,81 +1,104 @@
-import torch
-from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
+import re
 from typing import Dict, List, Union
 
-# Dummy decorator for LangGraph node (replace with actual import in integration)
-def langgraph_node(cls):
-    return cls
-
-@langgraph_node
 class SubtaskDistributor:
-    def __init__(self, model_name: str = "TinyLlama/TinyLlama-1.1B-Chat-v1.0", device: str = "cuda"):
-        self.model_name = model_name
-        self.device = device
-        self._load_model()
+    def __init__(self, llm_classifier=None):
+        """
+        llm_classifier: Callable that takes a prompt and returns 'simple' or 'complex'.
+        """
+        self.llm_classifier = llm_classifier
 
-    def _load_model(self):
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            torch_dtype=torch.float16,
-            device_map="auto",
-            trust_remote_code=True
-        )
-        self.pipe = pipeline(
-            "text-generation",
-            model=self.model,
-            tokenizer=self.tokenizer,
-            device=0 if self.device == "cuda" else -1,
-            max_new_tokens=64,
-            do_sample=False,
-        )
+    def parse_structured_prompt(self, structured_prompt: str) -> Dict:
+        """
+        Extracts fields from the structured prompt string.
+        """
+        fields = {
+            "task": "",
+            "signature": "",
+            "method": "",
+            "edge_cases": "",
+            "constraints": "",
+            "instructions": "",
+            "test_cases": ""
+        }
+        for line in structured_prompt.splitlines():
+            if line.startswith("# Task:"):
+                fields["task"] = line[len("# Task:"):].strip()
+            elif line.startswith("# Signature:"):
+                fields["signature"] = line[len("# Signature:"):].strip()
+            elif line.startswith("# Method:"):
+                fields["method"] = line[len("# Method:"):].strip()
+            elif line.startswith("# Edge Cases:"):
+                fields["edge_cases"] = line[len("# Edge Cases:"):].strip()
+            elif line.startswith("# Constraints:"):
+                fields["constraints"] = line[len("# Constraints:"):].strip()
+            elif line.startswith("# Instructions:"):
+                fields["instructions"] = line[len("# Instructions:"):].strip()
+            elif line.startswith("# Test Cases:"):
+                fields["test_cases"] = line[len("# Test Cases:"):].strip()
+        return fields
 
-    def _is_complex(self, prompt: str) -> bool:
-        """Use LLM to classify prompt as simple or complex. Fallback to heuristics if unclear."""
-        system_prompt = (
-            "Classify the following DSA problem as 'simple' or 'complex'. "
-            "A simple problem can be solved in a single function with no input validation or output formatting. "
-            "A complex problem requires multiple steps (validation, core logic, formatting). "
-            "Respond with only 'simple' or 'complex'.\nProblem: "
-        )
-        input_text = system_prompt + prompt
-        result = self.pipe(input_text)[0]["generated_text"][len(input_text):].strip().lower()
-        if "complex" in result:
+    def is_complex_prompt(self, structured_prompt: str) -> bool:
+        """
+        Heuristic + LLM fallback for classifying prompt complexity.
+        """
+        # Heuristic
+        if "edge case" in structured_prompt.lower() or \
+           "validate" in structured_prompt.lower() or \
+           "format" in structured_prompt.lower() or \
+           len(structured_prompt.split()) > 150:
             return True
-        if "simple" in result:
-            return False
-        # Fallback heuristic: long prompt or keywords
-        if len(prompt) > 200 or any(k in prompt.lower() for k in ["validate", "format", "step", "multiple", "return a list", "check if input"]):
-            return True
+        # Fallback to LLM if available
+        if self.llm_classifier:
+            result = self.llm_classifier(structured_prompt)
+            return result.strip().lower() == "complex"
         return False
 
-    def _decompose(self, input_dict: Dict) -> List[Dict]:
-        """Decompose the structured prompt into subtasks."""
-        base = {k: input_dict.get(k, "") for k in ["language", "method_used", "constraints", "original_prompt"]}
+    def generate_subtasks(self, parsed: Dict, original_context: str, language: str) -> List[Dict]:
+        """
+        Generate subtasks for complex tasks.
+        """
         subtasks = [
             {
-                **base,
-                "subtask_type": "validation",
-                "prompt": f"Write input validation code for: {input_dict['structured_prompt']}"
+                "subtask_type": "input_validation",
+                "original_context": original_context,
+                "signature": parsed["signature"],
+                "instructions": f"Write input validation code. {parsed['instructions']}",
+                "language": language
             },
             {
-                **base,
-                "subtask_type": "core",
-                "prompt": f"Implement the core logic for: {input_dict['structured_prompt']}"
+                "subtask_type": "core_algorithm",
+                "original_context": original_context,
+                "signature": parsed["signature"],
+                "instructions": f"Implement the core algorithm. {parsed['instructions']}",
+                "language": language
             },
             {
-                **base,
-                "subtask_type": "format",
-                "prompt": f"Format the output as required for: {input_dict['structured_prompt']}"
-            },
+                "subtask_type": "output_formatting",
+                "original_context": original_context,
+                "signature": parsed["signature"],
+                "instructions": f"Format the output as required. {parsed['instructions']}",
+                "language": language
+            }
         ]
         return subtasks
 
     def __call__(self, input_dict: Dict) -> Union[Dict, List[Dict]]:
-        prompt = input_dict.get("structured_prompt", "")
-        if not prompt:
-            raise ValueError("Input must contain 'structured_prompt'.")
-        if self._is_complex(prompt):
-            return self._decompose(input_dict)
-        # Simple: just forward as is, with subtask_type 'core'
-        return {**input_dict, "subtask_type": "core"} 
+        """
+        Main entry: parses, classifies, and routes tasks/subtasks.
+        """
+        structured_prompt = input_dict["structured_prompt"]
+        language = input_dict.get("language", "python")
+        parsed = self.parse_structured_prompt(structured_prompt)
+        is_complex = self.is_complex_prompt(structured_prompt)
+        if is_complex:
+            subtasks = self.generate_subtasks(parsed, structured_prompt, language)
+            return subtasks
+        else:
+            return {
+                "subtask_type": "core_algorithm",
+                "original_context": structured_prompt,
+                "signature": parsed["signature"],
+                "instructions": parsed["instructions"],
+                "language": language
+            } 
