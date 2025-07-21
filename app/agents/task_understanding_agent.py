@@ -2,6 +2,7 @@
 TaskUnderstandingAgent for spar.ai: Generates structured prompts using templates and user input.
 Determines the best method and overrides user-provided methods when needed.
 """
+
 import yaml
 from jinja2 import Template
 from typing import Dict
@@ -121,35 +122,35 @@ def generate_structured_prompt(task_data: Dict) -> Dict:
     """
     Generates a structured prompt using the best-fit method.
     Compares user-provided method with best-fit method and overrides if needed.
-    Returns a dict with structured_prompt, language, method_used, overridden_method, 
-    override_reason, edge_cases, constraints, and original_prompt.
+    Returns a dict with structured_prompt, language, method_used, overridden_method, override_reason, edge_cases, constraints, and original_prompt.
     """
     templates = load_templates()
+    print(f"[DEBUG] Loaded templates: {list(templates.keys())}")
     user_method = task_data.get('method', 'Not specified')
     original_prompt = task_data.get('original_prompt', '')
-    
     # Determine the best method using keyword analysis
     best_method = determine_best_method(original_prompt)
-    
+    print(f"[DEBUG] Best method selected: {best_method}")
     # Check if we should override the user's method
     should_override, override_reason = should_override_method(user_method, best_method, original_prompt)
-    
     # Use the best method (either user's or overridden)
     method_used = best_method if should_override else user_method
-    
     # Get template data
     if method_used not in templates:
-        template_data = templates['default']
+        template_data = templates.get('default', {})
     else:
         template_data = templates[method_used]
-    
+    # Safely get template values with defaults
+    signature = template_data.get('signature', 'def solution():')
+    method_desc = template_data.get('method', 'Choose the optimal algorithm or data structure.')
+    edge_cases = template_data.get('edge_cases', 'Handle empty input and large inputs.')
     # Compose the prompt
     prompt = (
         f"# Language: {task_data['language']}\n"
         f"# Task: {original_prompt}\n"
-        f"# Signature: {template_data['signature']}\n"
-        f"# Method: {template_data['method']}\n"
-        f"# Edge Cases: {template_data['edge_cases']}\n"
+        f"# Signature: {signature}\n"
+        f"# Method: {method_desc}\n"
+        f"# Edge Cases: {edge_cases}\n"
         f"# Constraints: {task_data.get('constraints', 'Not specified')}\n"
         f"# Instructions: Add inline error handling for all possible runtime errors and invalid inputs. Handle all listed edge cases explicitly in the code. Ensure the solution is robust and covers edge scenarios."
     )
@@ -157,14 +158,14 @@ def generate_structured_prompt(task_data: Dict) -> Dict:
     test_cases = task_data.get('test_cases', None)
     if test_cases and test_cases != 'Not specified':
         prompt += f"\n# Test Cases: {test_cases}"
-    
+    # Always return method_used, even if default
     return {
         "structured_prompt": prompt,
         "language": task_data["language"],
-        "method_used": method_used,
+        "method_used": method_used if method_used else "default",
         "overridden_method": should_override,
         "override_reason": override_reason if should_override else "",
-        "edge_cases": template_data['edge_cases'],
+        "edge_cases": edge_cases,
         "constraints": task_data.get('constraints', 'Not specified'),
         "original_prompt": original_prompt
     } 
