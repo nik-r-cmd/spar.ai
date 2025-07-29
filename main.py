@@ -1,10 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request  
 from pydantic import BaseModel
 import uvicorn
 import requests
 
 from app.agents.task_understanding_agent import generate_structured_prompt
 from app.agents.subtask_distributor import agent as subtask_distributor_agent
+from app.agents.prompt_refiner import PromptRefinerAgent
+
 
 app = FastAPI()
 
@@ -15,6 +17,10 @@ class PromptRequest(BaseModel):
 class STDRequest(BaseModel):
     structured_prompt: str
     language: str = "python"
+
+class PRARequest(BaseModel):
+    tua: dict
+    std: dict
 
 # This function will call the Jupyter notebook's run_subtask_distributor via REST
 def call_jupyter_subtask_distributor(structured_prompt):
@@ -66,6 +72,13 @@ async def solve(request: PromptRequest):
     print(f"[DEBUG] TUA method_used: {structured.get('method_used','')}")
     # 2. Call the Jupyter agent
     result = call_jupyter_subtask_distributor(structured["structured_prompt"])
+    return result
+@app.post("/api/pra")
+async def run_pra(request: PRARequest):
+    print("[DEBUG] PRARequest received:", request)
+    pra = PromptRefinerAgent()
+    result = pra.refine(request.tua, request.std)
+    print("[DEBUG] PRA result:", result)
     return result
 
 if __name__ == "__main__":

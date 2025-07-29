@@ -1,6 +1,5 @@
 import sys
 import os
-# Dynamically add the project root to sys.path if not already present
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, '../..'))
 if project_root not in sys.path:
@@ -29,18 +28,6 @@ if 'is_thinking' not in st.session_state:
 if 'sidebar_expanded' not in st.session_state:
     st.session_state.sidebar_expanded = True
 
-# Remove settings (mode/language) and default to Python only
-# Remove sidebar language/mode selectors and history
-# Update sidebar color to match screenshot (dark, no blue accent)
-# Update font to match screenshot (bold, modern, e.g., 'Inter', 'Poppins', or 'Segoe UI')
-# Remove suggestion cards
-# Update main area title and subtitle to match screenshot
-# Update flow/progress bar to only go up to PromptRefiner
-# Implement stage highlighting (active stage: accent color, others: muted)
-# Refactor logic: display TUA result as soon as available, then show 'Executing STD...' and update with STD result
-# Subtasks: display as glassmorphic bubbles with status badge (pending/complete) next to each
-
-# Move custom CSS injection to the very top to prevent flicker
 st.markdown(
     """
     <style>
@@ -148,22 +135,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- Visual Pipeline/Progress Bar ---
-st.markdown(
-    '''
-    <div style="display:flex;justify-content:center;align-items:center;margin-bottom:1.5em;">
-        <div style="display:flex;align-items:center;gap:0.7em;font-size:1.1em;">
-            <span style="padding:0.3em 0.9em;border-radius:16px;background:#232336;color:#a5b4fc;font-weight:600;">User Input</span>
-            <span style="font-size:1.5em;color:#a5b4fc;">→</span>
-            <span style="padding:0.3em 0.9em;border-radius:16px;background:#232336;color:#a5b4fc;font-weight:600;">TUA</span>
-            <span style="font-size:1.5em;color:#a5b4fc;">→</span>
-            <span style="padding:0.3em 0.9em;border-radius:16px;background:#232336;color:#a5b4fc;font-weight:600;">PromptRefiner</span>
-            <span style="font-size:1.5em;color:#a5b4fc;">→</span>
-            <span style="padding:0.3em 0.9em;border-radius:16px;background:#232336;color:#a5b4fc;font-weight:600;">CodeAgent</span>
-        </div>
-    </div>
-    ''', unsafe_allow_html=True)
-
 # --- Sidebar: Task History ---
 with st.sidebar:
     st.markdown('<div class="sidebar-title">Task History</div>', unsafe_allow_html=True)
@@ -183,21 +154,6 @@ with st.sidebar:
 # --- Main area title and subtitle ---
 st.markdown('<div style="text-align:center;margin-top:2em;margin-bottom:0.5em;font-family:Inter,Segoe UI,Poppins,sans-serif;font-weight:800;font-size:3em;letter-spacing:0.01em;">SPAR</div>', unsafe_allow_html=True)
 st.markdown('<div style="text-align:center;margin-bottom:2.5em;font-family:Inter,Segoe UI,Poppins,sans-serif;font-weight:400;font-size:1.2em;color:#b3b3c6;">spar.ai: Agentic Code Reasoning Assistant</div>', unsafe_allow_html=True)
-
-# # --- Glassmorphic pipeline bar ---
-# st.markdown('''
-# <div style="display:flex;justify-content:center;margin-bottom:2.5em;">
-#   <div style="background:rgba(36,37,46,0.7);backdrop-filter:blur(8px);border-radius:2em;padding:0.7em 1.2em;display:flex;gap:0.7em;box-shadow:0 4px 32px 0 rgba(165,180,252,0.10);">
-#     <span style="background:linear-gradient(90deg,#232336,#35354a);color:#b3b3c6;font-weight:700;padding:0.5em 1.3em;border-radius:1.5em;font-size:1.1em;box-shadow:0 2px 8px 0 rgba(165,180,252,0.07);">User Input</span>
-#     <span style="color:#b3b3c6;font-size:1.5em;align-self:center;">→</span>
-#     <span style="background:linear-gradient(90deg,#232336,#35354a);color:#b3b3c6;font-weight:700;padding:0.5em 1.3em;border-radius:1.5em;font-size:1.1em;box-shadow:0 2px 8px 0 rgba(165,180,252,0.07);">TUA</span>
-#     <span style="color:#b3b3c6;font-size:1.5em;align-self:center;">→</span>
-#     <span style="background:linear-gradient(90deg,#232336,#35354a);color:#b3b3c6;font-weight:700;padding:0.5em 1.3em;border-radius:1.5em;font-size:1.1em;box-shadow:0 2px 8px 0 rgba(165,180,252,0.07);">Subtask Routing</span>
-#     <span style="color:#b3b3c6;font-size:1.5em;align-self:center;">→</span>
-#     <span style="background:linear-gradient(90deg,#232336,#35354a);color:#b3b3c6;font-weight:700;padding:0.5em 1.3em;border-radius:1.5em;font-size:1.1em;box-shadow:0 2px 8px 0 rgba(165,180,252,0.07);">PromptRefiner</span>
-#   </div>
-# </div>
-# ''', unsafe_allow_html=True)
 
 # --- Prompt input row: glassmorphism, centered, Cursor-style ---
 col1, col2 = st.columns([8,1], gap="small")
@@ -309,77 +265,117 @@ if send_clicked and prompt_text.strip():
     problem_text = cleaned_prompt
     st.session_state['last_prompt'] = cleaned_prompt
     st.session_state['last_task_history'] = input_handler.task_history
+
     st.markdown('<div style="display:flex;justify-content:center;width:100%;"><div style="max-width:650px;width:100%;margin:0 auto;">', unsafe_allow_html=True)
+    
     try:
         lang = "python"
-        # Step 1: Call TUA
+
+        # --- TUA Call ---
         with st.spinner("Running TaskUnderstandingAgent (TUA)..."):
             tua_response = requests.post(
                 "http://localhost:8000/api/tua",
                 json={"user_prompt": problem_text, "language": lang},
                 timeout=60
             )
+        tua_result = tua_response.json()
+
         if tua_response.status_code == 200:
-            tua_result = tua_response.json()
+            st.session_state["tua_output"] = tua_result
             method_used = tua_result.get('method_used', '')
-            print(f"[DEBUG] TUA method_used (from /api/tua): {method_used}")
-            # Display TUA result immediately
+            constraints = tua_result.get('constraints', '')
             st.markdown('<div class="glass-card">', unsafe_allow_html=True)
             st.markdown("<h4 style='margin-bottom:0.5em;'>TaskUnderstandingAgent (TUA)</h4>", unsafe_allow_html=True)
             with st.expander("Structured Prompt"):
                 st.code(tua_result.get("structured_prompt", ""), language="text")
             if method_used:
                 st.markdown(f"<b>Method Used:</b> {method_used}", unsafe_allow_html=True)
-            constraints = tua_result.get('constraints', '')
             if constraints:
                 st.markdown(f"<b>Constraints:</b> {constraints}", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
-            # Step 2: Call STD with structured prompt
-            with st.spinner("Running SubtaskDistributor (STD)..."):
-                std_response = requests.post(
-                    "http://localhost:8000/api/std",
-                    json={"structured_prompt": tua_result.get("structured_prompt", ""), "language": lang},
-                    timeout=60
-                )
-            if std_response.status_code == 200:
-                std_result = std_response.json()
-                st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-                st.markdown("<h4 style='margin-bottom:0.5em;'>SubtaskDistributor (STD)</h4>", unsafe_allow_html=True)
-                std_data = std_result.get('std_result', {})
-                # Classification badge
-                classification = std_data.get("classification", "UNKNOWN")
-                if classification == "SIMPLE":
-                    st.success(f"**Classification: {classification}**")
-                elif classification == "MEDIUM":
-                    st.warning(f"**Classification: {classification}**")
-                elif classification == "COMPLEX":
-                    st.error(f"**Classification: {classification}**")
-                else:
-                    st.info(f"**Classification: {classification}**")
-                # Explanation in glass card
-                explanation = std_data.get("explanation", "")
-                if explanation:
-                    st.markdown('<div class="glass-card" style="margin-bottom:1em;"><b>Explanation:</b><br>' + explanation + '</div>', unsafe_allow_html=True)
-                # Subtasks in glass cards
-                subtasks = std_data.get("subtasks", [])
-                if subtasks:
-                    st.markdown("**Subtasks:**")
-                    for subtask in subtasks:
-                        st.markdown(
-                            f"<div class=\"glass-card\" style=\"margin-bottom:1em;\"><b>{subtask.get('step','')}:</b> {subtask.get('description','')}</div>",
-                            unsafe_allow_html=True
-                        )
-                st.markdown('</div>', unsafe_allow_html=True)
-                
-            else:
-                st.error("STD backend error")
         else:
             st.error("TUA backend error")
+            st.stop()
+
+        # --- STD Call ---
+        with st.spinner("Running SubtaskDistributor (STD)..."):
+            std_response = requests.post(
+                "http://localhost:8000/api/std",
+                json={"structured_prompt": tua_result.get("structured_prompt", ""), "language": lang},
+                timeout=60
+            )
+        std_result = std_response.json()
+
+        if std_response.status_code == 200:
+            std_data = std_result.get('std_result', {})
+            st.session_state["std_output"] = std_data
+
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+            st.markdown("<h4 style='margin-bottom:0.5em;'>SubtaskDistributor (STD)</h4>", unsafe_allow_html=True)
+
+            classification = std_data.get("classification", "UNKNOWN")
+            if classification == "SIMPLE":
+                st.success(f"**Classification: {classification}**")
+            elif classification == "MEDIUM":
+                st.warning(f"**Classification: {classification}**")
+            elif classification == "COMPLEX":
+                st.error(f"**Classification: {classification}**")
+            else:
+                st.info(f"**Classification: {classification}**")
+
+            explanation = std_data.get("explanation", "")
+            if explanation:
+                st.markdown(f'<div class="glass-card" style="margin-bottom:1em;"><b>Explanation:</b><br>{explanation}</div>', unsafe_allow_html=True)
+
+            subtasks = std_data.get("subtasks", [])
+            if subtasks:
+                st.markdown("**Subtasks:**")
+                for subtask in subtasks:
+                    st.markdown(
+                        f"<div class=\"glass-card\" style=\"margin-bottom:1em;\"><b>{subtask.get('step','')}:</b> {subtask.get('description','')}</div>",
+                        unsafe_allow_html=True
+                    )
+            st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            st.error("STD backend error")
+            st.stop()
+
     except Exception as e:
         st.error(f"An error occurred: {e}")
         st.info("If this persists, please contact support or check the backend logs.")
         st.code(traceback.format_exc(), language="python")
     st.markdown('</div></div>', unsafe_allow_html=True)
+
+# --- PRA Integration: Trigger Only When TUA and STD Both Complete ---
+if st.session_state.get("tua_output") and st.session_state.get("std_output"):
+    st.subheader("Prompt Refiner Agent Output")
+
+    pra_input = {
+        "tua": st.session_state["tua_output"],
+        "std": st.session_state["std_output"]
+    }
+    st.write("PRA input being sent:", pra_input)  # Debug print
+
+    try:
+        pra_response = requests.post("http://localhost:8000/api/pra", json=pra_input).json()
+        st.session_state["pra_output"] = pra_response
+        st.write("PRA raw response:", pra_response)  # Debug print
+        
+        if "refined_prompt" in pra_response:
+            st.markdown(
+                f"<div class=\"glass-card\" style=\"margin-bottom:1em;\"><b>Refined Prompt:</b><br>{pra_response['refined_prompt']}</div>",
+                unsafe_allow_html=True
+            )
+        elif "refined_prompts" in pra_response:
+            for item in pra_response["refined_prompts"]:
+                subtask_label = item.get('subtask', 'Main Task') if item.get('subtask') else 'Main Task'
+                st.markdown(
+                    f"<div class=\"glass-card\" style=\"margin-bottom:1em;\"><b>{subtask_label}:</b><br>{item['refined_prompt']}</div>",
+                    unsafe_allow_html=True
+                )
+    except Exception as e:
+        st.error(f"PRA API failed: {str(e)}")
+
 
 # CSS: Add glass-card, subtask-bubble, subtask-status for glassmorphic result cards and bubbles
 st.markdown(
@@ -424,30 +420,3 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
-# NOTE: For true incremental display, backend must provide separate endpoints for TUA and STD. With current backend, only full response can be shown.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
