@@ -50,7 +50,8 @@ class PromptRefinerAgent:
 
     def refine(self, tua, std):
         # For SIMPLE: single comprehensive prompt
-        if not std.get("subtasks"):
+        subtasks = std.get("subtasks", [])
+        if not subtasks or len(subtasks) == 0:
             base_prompt = self._template_prompt(tua, std)
             polished = self._llm_polish(base_prompt)
             # Return a clean, focused prompt for simple problems
@@ -58,7 +59,7 @@ class PromptRefinerAgent:
         # For MEDIUM/COMPLEX: focused prompts for each subtask
         else:
             prompts = []
-            for i, sub in enumerate(std["subtasks"], 1):
+            for i, sub in enumerate(subtasks, 1):
                 subtask_desc = sub.get("description", "")
                 base_prompt = self._template_prompt(tua, std, subtask_desc)
                 polished = self._llm_polish(base_prompt)

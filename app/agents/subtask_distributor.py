@@ -106,7 +106,7 @@ class SubtaskDistributor:
                     "Respond in this format:\n"
                     "Classification: <SIMPLE/MEDIUM/COMPLEX>\n"
                     "Explanation: <your reasoning>\n"
-                    "If COMPLEX, also provide:\n"
+                    "ONLY if the problem is COMPLEX, also provide:\n"
                     "Subtasks:\n"
                     "Step 1: <description>\n"
                     "Step 2: <description>\n"
