@@ -49,20 +49,22 @@ class PromptRefinerAgent:
         return str(outputs)
 
     def refine(self, tua, std):
-        # For SIMPLE: single prompt
+        # For SIMPLE: single comprehensive prompt
         if not std.get("subtasks"):
             base_prompt = self._template_prompt(tua, std)
             polished = self._llm_polish(base_prompt)
-            return {"refined_prompts": [{"subtask": None, "refined_prompt": polished}]}
-        # For MEDIUM/COMPLEX: one prompt per subtask
+            # Return a clean, focused prompt for simple problems
+            return {"refined_prompts": [{"subtask": "Complete Solution", "refined_prompt": polished}]}
+        # For MEDIUM/COMPLEX: focused prompts for each subtask
         else:
             prompts = []
-            for sub in std["subtasks"]:
+            for i, sub in enumerate(std["subtasks"], 1):
                 subtask_desc = sub.get("description", "")
                 base_prompt = self._template_prompt(tua, std, subtask_desc)
                 polished = self._llm_polish(base_prompt)
+                # Create focused prompts that can be passed to code agent
                 prompts.append({
-                    "subtask": subtask_desc,
+                    "subtask": f"Step {i}: {subtask_desc}",
                     "refined_prompt": polished
                 })
             return {"refined_prompts": prompts} 
