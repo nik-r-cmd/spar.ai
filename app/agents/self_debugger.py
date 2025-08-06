@@ -2,7 +2,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import logging
 import re
 
-MODEL_NAME = "codellama/CodeLlama-7b-Instruct-hf"
+MODEL_NAME = "Qwen/Qwen1.5-7B-Chat"
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(

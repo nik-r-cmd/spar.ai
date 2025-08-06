@@ -1,6 +1,7 @@
 import os
 from jinja2 import Template
 from transformers import pipeline
+from .base_agent import SPARConfig
 
 PROMPT_TEMPLATE = """
 # Language: {{ language }}
@@ -14,7 +15,8 @@ PROMPT_TEMPLATE = """
 """
 
 class PromptRefinerAgent:
-    def __init__(self, llm_pipe=None):
+    def __init__(self, config: SPARConfig = None, llm_pipe=None):
+        self.config = config
         self.template = Template(PROMPT_TEMPLATE)
         self.llm_pipe = llm_pipe  # Should be a HuggingFace pipeline or similar
 
@@ -49,13 +51,17 @@ class PromptRefinerAgent:
         return str(outputs)
 
     def refine(self, tua, std):
-        # For SIMPLE: single comprehensive prompt
+        # Check if this is a SIMPLE problem (no subtasks or empty subtasks)
         subtasks = std.get("subtasks", [])
-        if not subtasks or len(subtasks) == 0:
+        classification = std.get("classification", "UNKNOWN")
+        
+        # For SIMPLE problems: single comprehensive prompt
+        if classification == "SIMPLE" or not subtasks or len(subtasks) == 0:
             base_prompt = self._template_prompt(tua, std)
             polished = self._llm_polish(base_prompt)
             # Return a clean, focused prompt for simple problems
             return {"refined_prompts": [{"subtask": "Complete Solution", "refined_prompt": polished}]}
+        
         # For MEDIUM/COMPLEX: focused prompts for each subtask
         else:
             prompts = []
@@ -68,4 +74,29 @@ class PromptRefinerAgent:
                     "subtask": f"Step {i}: {subtask_desc}",
                     "refined_prompt": polished
                 })
-            return {"refined_prompts": prompts} 
+            return {"refined_prompts": prompts}
+
+    def refine_prompt(self, problem: str, code: str, error: str, test_cases: list) -> str:
+        """Refine the original problem prompt based on code failure and test cases"""
+        # Create a refined prompt that addresses the specific failure
+        refined_prompt = f"""The following code failed to pass the test cases:
+
+Original Problem: {problem}
+
+Failed Code:
+{code}
+
+Error: {error}
+
+Test Cases:
+{chr(10).join(test_cases)}
+
+Please provide a corrected solution that:
+1. Addresses the specific error mentioned above
+2. Passes all the provided test cases
+3. Maintains the original problem requirements
+4. Uses clear, efficient Python code
+
+Corrected solution:"""
+        
+        return refined_prompt 

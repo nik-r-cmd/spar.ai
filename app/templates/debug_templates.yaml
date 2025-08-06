@@ -1,0 +1,82 @@
+# Debug Templates for SPAR System
+# These are Jinja2 templates used for automatic code fixing
+
+templates:
+  IndexError: |
+    def {{func_name}}({{params}}):
+        if not {{array_name}} or {{index_expr}} >= len({{array_name}}) or {{index_expr}} < 0:
+            return None
+        {{original_body}}
+
+  TypeError_none: |
+    def {{func_name}}({{params}}):
+        {% for param in param_list %}
+        if {{param}} is None:
+            return None
+        {% endfor %}
+        {{original_body}}
+
+  TypeError_type: |
+    def {{func_name}}({{params}}):
+        {% for param, expected_type in type_checks %}
+        if not isinstance({{param}}, {{expected_type}}):
+            raise TypeError(f"Expected {{expected_type}}, got {type({{param}}).__name__}")
+        {% endfor %}
+        {{original_body}}
+
+  ValueError: |
+    def {{func_name}}({{params}}):
+        {% for condition, message in value_checks %}
+        if {{condition}}:
+            raise ValueError("{{message}}")
+        {% endfor %}
+        {{original_body}}
+
+  IndentationError: |
+    def {{func_name}}({{params}}):
+    {{original_body | indent(4, True)}}
+
+  AssertionError: |
+    def {{func_name}}({{params}}):
+        result = None
+        try:
+            {{original_body | indent(8, True)}}
+        except AssertionError:
+            return {{default_return}}
+        return result
+
+  KeyError: |
+    def {{func_name}}({{params}}):
+        {{original_body}}
+
+  AttributeError: |
+    def {{func_name}}({{params}}):
+        {% for obj, attr in attr_checks %}
+        if not hasattr({{obj}}, '{{attr}}'):
+            return None
+        {% endfor %}
+        {{original_body}}
+
+  off_by_one: |
+    def {{func_name}}({{params}}):
+        {{fixed_loop_body}}
+
+  generic_fix: |
+    def {{func_name}}({{params}}):
+        try:
+            {{original_body | indent(8, True)}}
+        except Exception:
+            return None
+
+# Template Variables Documentation:
+# - func_name: Name of the function being fixed
+# - params: Function parameters as string
+# - param_list: List of parameter names
+# - array_name: Name of array/list variable (default: 'arr')
+# - index_expr: Index expression (default: 'i')
+# - type_checks: List of (param, type) tuples for type checking
+# - value_checks: List of (condition, message) tuples for value validation
+# - attr_checks: List of (object, attribute) tuples for attribute checking
+# - default_return: Default return value (default: "None")
+# - fixed_loop_body: Corrected loop body for off-by-one errors
+# - original_body: Original function body
