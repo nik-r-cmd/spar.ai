@@ -1,70 +1,38 @@
-"""
-Code generation agent
-"""
-import re
+# app/agents/code_agent.py
 import logging
-from .base_agent import LocalModelManager, handle_errors, SPARConfig
+from typing import Dict, Any
+from app.agents.base_agent import LocalModelManager, handle_errors
 
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger("CodeAgent")
+if not LOGGER.hasHandlers():
+    h = logging.StreamHandler()
+    h.setFormatter(logging.Formatter('[%(asctime)s] %(levelname)s - %(message)s'))
+    LOGGER.addHandler(h)
+LOGGER.setLevel(logging.INFO)
+
 
 class CodeAgent:
-    """Agent responsible for generating Python code solutions"""
-    
-    def __init__(self, config: SPARConfig):
-        self.config = config
-        self.model_manager = LocalModelManager()
-        self.model_manager.initialize(config)
-        logger.info("CodeAgent initialized")
-
-    @handle_errors
-    def generate_code(self, problem: str) -> str:
-        """Generate code solution for the given problem"""
-        prompt = f"""You are an expert Python programmer. Solve this problem:
-
-{problem}
-
-Requirements:
-- Write clean, efficient Python code
-- Provide only the function definition
-- Include proper error handling if needed
-- Use descriptive variable names
-- Return only the Python function code, no explanations
-
-Python function:"""
-
+    def __init__(self):
         try:
-            response = self.model_manager.generate_content(prompt)
-            code = self._extract_code_from_response(response)
-            return code
+            self.pipe = LocalModelManager.get_pipeline()
+            LOGGER.info("CodeAgent connected to global pipeline.")
         except Exception as e:
-            logger.error(f"Code generation failed: {e}")
-            return ""
+            LOGGER.error("Failed to get pipeline for CodeAgent: %s", e)
+            self.pipe = None
 
-    def _extract_code_from_response(self, response: str) -> str:
-        """Extract Python code from model response"""
-        if "```python" in response:
-            match = re.search(r'```python\s*\n(.*?)```', response, re.DOTALL)
-            if match:
-                return match.group(1).strip()
-        elif "```" in response:
-            match = re.search(r'```\s*\n(.*?)```', response, re.DOTALL)
-            if match:
-                return match.group(1).strip()
-        
-        lines = response.split('\n')
-        code_lines = []
-        in_function = False
-        
-        for line in lines:
-            if line.strip().startswith('def '):
-                in_function = True
-                code_lines.append(line)
-            elif in_function:
-                if line.strip() and not line.startswith(' ') and not line.startswith('\t'):
-                    break
-                code_lines.append(line)
-        
-        if code_lines:
-            return '\n'.join(code_lines)
-        
-        return response.strip()
+    @handle_errors(default_return={"error": "code generation failed"})
+    def generate_code(self, refined_prompt: str, max_new_tokens: int = 512) -> Dict[str, Any]:
+        if self.pipe is None:
+            raise RuntimeError("LLM pipeline not available for code generation")
+        LOGGER.info("CodeAgent generating code from prompt (len=%d)", len(refined_prompt))
+        outputs = self.pipe(refined_prompt, max_new_tokens=max_new_tokens, do_sample=False)
+        # try to extract generated_text
+        if isinstance(outputs, list) and len(outputs) > 0 and isinstance(outputs[0], dict) and "generated_text" in outputs[0]:
+            return {"generated_code": outputs[0]["generated_text"]}
+        if isinstance(outputs, dict) and "generated_text" in outputs:
+            return {"generated_code": outputs["generated_text"]}
+        return {"generated_code": str(outputs)}
+
+
+# If other modules expect LocalModelManager, CodeAgent, etc. they can import these names
+LocalModelManager = LocalModelManager

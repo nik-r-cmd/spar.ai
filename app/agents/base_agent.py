@@ -1,190 +1,114 @@
-"""
-Base agent utilities and configuration for SPAR system
-"""
-import os
-import logging
-import time
-import gc
-import torch
+# app/agents/base_agent.py
+import threading
 from dataclasses import dataclass
-from functools import wraps
-from typing import Optional
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from typing import Optional, Callable, Any
+import logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Transformers imports
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+
+LOGGER = logging.getLogger("base_agent")
+LOGGER.setLevel(logging.INFO)
+if not LOGGER.hasHandlers():
+    h = logging.StreamHandler()
+    h.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s - %(message)s"))
+    LOGGER.addHandler(h)
+
 
 @dataclass
 class SPARConfig:
-    """Configuration for SPAR system"""
     model_name: str = "Qwen/Qwen1.5-7B-Chat"
-    device: str = "auto"
+    use_trust_remote_code: bool = True
+    device_map: str = "auto"
+    torch_dtype: Optional[str] = "auto"  # "auto" -> will let transformers decide
+    low_cpu_mem_usage: bool = True
+    pipeline_task: str = "text-generation"
     max_new_tokens: int = 512
-    temperature: float = 0.3
-    do_sample: bool = True
-    top_p: float = 0.8
-    test_timeout: int = 10
-    max_test_cases: int = 5
-    similarity_threshold: float = 0.8
-    reuse_similar_code: bool = True
+    temperature: float = 0.7
+
+
+# Singleton manager for the model/pipeline
+class LocalModelManager:
+    _lock = threading.Lock()
+    _tokenizer = None
+    _model = None
+    _pipeline = None
+    _config = SPARConfig()
 
     @classmethod
-    def from_env(cls):
-        """Load configuration from environment variables"""
-        return cls(
-            model_name=os.getenv("MODEL_NAME", cls.model_name),
-            device=os.getenv("DEVICE", cls.device),
-            test_timeout=int(os.getenv("TEST_TIMEOUT", str(cls.test_timeout))),
-            similarity_threshold=float(os.getenv("SIMILARITY_THRESHOLD", str(cls.similarity_threshold)))
-        )
+    def get_config(cls) -> SPARConfig:
+        return cls._config
 
-def handle_errors(func):
-    """Error handling decorator"""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            logger.error(f"Error in {func.__name__}: {str(e)}")
-            raise
-    return wrapper
+    @classmethod
+    def load_model(cls, force_reload: bool = False):
+        with cls._lock:
+            if cls._pipeline is not None and not force_reload:
+                LOGGER.info("Model pipeline already loaded; reusing instance.")
+                return cls._pipeline
 
-class LocalModelManager:
-    """Singleton manager for local model"""
-    _instance = None
-    _model = None
-    _tokenizer = None
-    _config = None
-    _initialized = False
-    _lock = None
+            model_name = cls._config.model_name
+            LOGGER.info(f"Loading model pipeline: {model_name}")
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            import threading
-            cls._lock = threading.Lock()
-        return cls._instance
-
-    @handle_errors
-    def initialize(self, config: SPARConfig):
-        """Initialize the local model"""
-        with self._lock:
-            if not self._initialized:
-                logger.info(f"Loading model: {config.model_name}")
-                
-                # Set memory optimization environment variables
-                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-                
-                # Clear any existing model from memory
-                if self._model is not None:
-                    del self._model
-                    self._model = None
-                if self._tokenizer is not None:
-                    del self._tokenizer
-                    self._tokenizer = None
-                
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                    gc.collect()
-                
-                self._tokenizer = AutoTokenizer.from_pretrained(
-                    config.model_name,
-                    trust_remote_code=True
+            # Safe loader with memory-friendly flags
+            try:
+                # Load tokenizer
+                cls._tokenizer = AutoTokenizer.from_pretrained(
+                    model_name, trust_remote_code=cls._config.use_trust_remote_code
                 )
-                
-                device_map = "auto" if config.device == "auto" else None
-                torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-                
-                # Add memory optimization settings with CPU offloading
-                if torch.cuda.is_available():
-                    # Use CPU offloading to reduce GPU memory usage
-                    max_memory = {
-                        0: "20GB",  # GPU memory limit
-                        "cpu": "32GB"  # CPU memory for offloading
-                    }
-                    device_map = "auto"
-                else:
-                    max_memory = None
-                    device_map = None
-                
-                self._model = AutoModelForCausalLM.from_pretrained(
-                    config.model_name,
-                    torch_dtype=torch_dtype,
-                    device_map=device_map,
-                    trust_remote_code=True,
-                    low_cpu_mem_usage=True,
-                    max_memory=max_memory,
-                    offload_folder="offload"  # Offload to disk if needed
+
+                # Load model
+                cls._model = AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    trust_remote_code=cls._config.use_trust_remote_code,
+                    device_map=cls._config.device_map,
+                    low_cpu_mem_usage=cls._config.low_cpu_mem_usage,
+                    torch_dtype=getattr(torch, cls._config.torch_dtype) if cls._config.torch_dtype and hasattr(torch, cls._config.torch_dtype) else None,
                 )
-                
-                self._config = config
-                self._initialized = True
-                logger.info("Model loaded successfully")
-            
-            return self._model, self._tokenizer
 
-    @handle_errors
-    def generate_content(self, prompt: str, max_tokens: Optional[int] = None) -> str:
-        """Generate content using the local model"""
-        if self._model is None or self._tokenizer is None:
-            raise RuntimeError("Model not initialized")
-        
-        max_tokens = max_tokens or self._config.max_new_tokens
-        
-        messages = [{"role": "user", "content": prompt}]
-        text = self._tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
-        
-        model_inputs = self._tokenizer([text], return_tensors="pt").to(self._model.device)
-        
-        with torch.no_grad():
-            generated_ids = self._model.generate(
-                input_ids=model_inputs.input_ids,
-                attention_mask=model_inputs.attention_mask,  
-                max_new_tokens=max_tokens,
-                temperature=self._config.temperature,
-                do_sample=self._config.do_sample,
-                top_p=self._config.top_p,
-                pad_token_id=self._tokenizer.eos_token_id
-            )
-        
-        generated_ids = [
-            output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
-        ]
-        
-        response = self._tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        
-        # Clear GPU cache after generation
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            gc.collect()
-            
-            # Force garbage collection multiple times
-            for _ in range(3):
-                gc.collect()
-        
-        return response.strip()
+                # Create pipeline
+                cls._pipeline = pipeline(
+                    cls._config.pipeline_task,
+                    model=cls._model,
+                    tokenizer=cls._tokenizer,
+                )
+                LOGGER.info("Model pipeline loaded successfully.")
+                return cls._pipeline
 
-    def is_initialized(self) -> bool:
-        """Check if model is initialized"""
-        return self._model is not None and self._tokenizer is not None
+            except Exception as e:
+                LOGGER.exception("Failed to load model pipeline.")
+                # Clean up partially loaded objects
+                cls._tokenizer = None
+                cls._model = None
+                cls._pipeline = None
+                raise
 
-    def clear_cache(self):
-        """Clear GPU cache and memory"""
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        gc.collect()
-        
-        # Force multiple garbage collection cycles
-        for _ in range(5):
-            gc.collect()
-            
-        # Clear any cached tensors
-        if hasattr(torch, 'cuda') and torch.cuda.is_available():
-            torch.cuda.synchronize()
+    @classmethod
+    def get_pipeline(cls):
+        if cls._pipeline is None:
+            return cls.load_model()
+        return cls._pipeline
+
+    @classmethod
+    def safe_reload(cls, new_model_name: Optional[str] = None):
+        with cls._lock:
+            if new_model_name:
+                cls._config.model_name = new_model_name
+            # delete references and reload
+            cls._tokenizer = None
+            cls._model = None
+            cls._pipeline = None
+            return cls.load_model()
+
+
+# Small decorator helper for agent functions to standardize errors
+def handle_errors(default_return: Any = None):
+    def decorator(fn: Callable):
+        def wrapper(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except Exception as e:
+                LOGGER.exception(f"Unhandled exception in {fn.__name__}")
+                return default_return
+        return wrapper
+    return decorator
