@@ -1,6 +1,3 @@
-"""
-Test generation and execution agent
-"""
 import os
 import ast
 import re
@@ -22,36 +19,48 @@ class TesterAgent:
         logger.info("TesterAgent initialized")
 
     @handle_errors
-    def generate_tests(self, problem: str, code: str) -> List[str]:
+    def generate_tests(self, problem: str, code: str, edge_cases: str = "", constraints: str = "") -> List[str]:
         """Generate test cases for the given code"""
-        function_name = self._extract_function_name(code)
+        function_name = self._extract_function_name(code) or "solution"
         if not function_name:
-            logger.warning("Could not extract function name from code")
-            return []
+            logger.warning("Using default function name 'solution'")
 
-        prompt = f"""Generate exactly 5 test cases for this Python function:
+        prompt = [
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert Python test case generator. "
+                    "Your job is to create diverse, valid Python test assertions for a given function."
+                )
+            },
+            {
+                "role": "user",
+                "content": f"""Generate exactly 5 test cases for this Python function:
 
-Problem: {problem}
+Problem: {problem or "The problem description is provided above."}
 
 Function code:
 {code}
 
+Edge Cases: {edge_cases or "Include edge cases and invalid inputs"}
+Constraints: {constraints or "Follow performance and correctness requirements"}
+
 Requirements:
 - Generate 5 different test assertions
-- Use the format: assert {function_name}(input) == expected_output
-- Cover edge cases and normal cases
-- Make sure all test cases are valid Python assertions
+- Use the format: assert {function_name}(input) == expected_output or assert_raises(Exception, {function_name}, input)
+- Cover both normal and edge cases
+- Ensure all test cases are valid Python assertions
 - Return only the assert statements, one per line
 
 Test cases:"""
+            }
+        ]
 
         try:
             response = self.model_manager.generate_content(prompt, max_tokens=256)
             test_cases = self._parse_test_cases(response, function_name)
-            
             if len(test_cases) > 5:
                 test_cases = test_cases[:5]
-            
             return test_cases
         except Exception as e:
             logger.error(f"Test generation failed: {e}")
@@ -59,6 +68,13 @@ Test cases:"""
 
     def _extract_function_name(self, code: str) -> Optional[str]:
         """Extract function name from code"""
+        try:
+            tree = ast.parse(code)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef):
+                    return node.name
+        except SyntaxError:
+            pass
         for line in code.split('\n'):
             if line.strip().startswith('def '):
                 return line.strip().split('def ')[1].split('(')[0]
@@ -90,7 +106,7 @@ Test cases:"""
         line = re.sub(r'^\d+\.\s*', '', line)
         line = re.sub(r'^[-*]\s*', '', line)
 
-        assert_match = re.search(r'assert\s+\w+\([^)]*\)\s*==\s*[^`\n]+', line)
+        assert_match = re.search(r'assert\s+\w+\([^)]*\)\s*(==|raises)\s*[^`\n]+', line)
         if assert_match:
             line = assert_match.group().strip()
 
@@ -105,10 +121,8 @@ Test cases:"""
         """Check if a line is a valid test case"""
         if not line or not line.startswith('assert') or function_name not in line:
             return False
-
-        if not any(op in line for op in ['==', '!=', '<', '>', '<=', '>=', 'is', 'in']):
+        if not any(op in line for op in ['==', '!=', '<', '>', '<=', '>=', 'is', 'in', 'raises']):
             return False
-
         try:
             ast.parse(line)
             return True
@@ -122,15 +136,18 @@ Test cases:"""
             return {"status": "error", "error": "No test cases generated", "passed": 0, "total": 0}
 
         valid_tests = [test for test in test_cases if self._is_valid_syntax(test)]
-
         if not valid_tests:
             return {"status": "error", "error": "No valid test cases", "passed": 0, "total": 0}
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write("from unittest import TestCase\n")
             f.write(f"{code}\n\n")
             f.write("# Test cases\n")
             for test_case in valid_tests:
-                f.write(f"{test_case}\n")
+                if 'raises' in test_case:
+                    f.write(f"try:\n    {test_case.split('raises')[0].strip()}()\nexcept Exception as e:\n    assert isinstance(e, {test_case.split('raises')[1].strip()}), f'Expected {test_case.split('raises')[1].strip()} but got {{type(e).__name__}}'\n")
+                else:
+                    f.write(f"{test_case}\n")
             f.write("\nprint('All tests passed!')\n")
             temp_file = f.name
 
@@ -183,22 +200,26 @@ Test cases:"""
 
     def _identify_failed_test(self, code: str, error: str, test_cases: List[str]) -> str:
         """Extract the specific test that failed from error output"""
-        # Simple pattern matching - can be enhanced
         for test in test_cases:
-            if test.split('(')[0] in error:  # Match function name
+            if test.split('(')[0] in error:
                 return test
-        return test_cases[0] 
+        return test_cases[0]
 
-    
     def _count_passed_tests(self, code: str, test_cases: List[str]) -> int:
         """Count how many individual tests pass"""
         passed = 0
         for test_case in test_cases:
             with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                f.write("from unittest import TestCase\n")
                 f.write(f"{code}\n\n")
                 f.write(f"try:\n")
-                f.write(f"    {test_case}\n")
-                f.write(f"    print('PASS')\n")
+                if 'raises' in test_case:
+                    f.write(f"    {test_case.split('raises')[0].strip()}()\n")
+                    f.write(f"except Exception as e:\n")
+                    f.write(f"    print('PASS' if isinstance(e, {test_case.split('raises')[1].strip()}) else f'FAIL: {{e}}')\n")
+                else:
+                    f.write(f"    {test_case}\n")
+                    f.write(f"    print('PASS')\n")
                 f.write(f"except Exception as e:\n")
                 f.write(f"    print(f'FAIL: {{e}}')\n")
                 temp_file = f.name

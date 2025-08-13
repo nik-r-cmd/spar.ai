@@ -1,224 +1,156 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import logging
 import re
+from typing import Dict, Any, Optional
+from .base_agent import LocalModelManager, SPARConfig
+import yaml
 
-MODEL_NAME = "Qwen/Qwen1.5-7B-Chat"
-
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
-model = AutoModelForCausalLM.from_pretrained(
-    MODEL_NAME,
-    torch_dtype="auto",
-    device_map="auto",
-    trust_remote_code=True
-)
-llm_pipe = pipeline(
-    "text-generation",
-    model=model,
-    tokenizer=tokenizer,
-    max_new_tokens=512,
-    do_sample=True,
-    temperature=0.7,
-)
-
-class SubtaskDistributor:
-    def __init__(self, llm_pipe):
-        self.pipe = llm_pipe
-        self.logger = logging.getLogger("SubtaskDistributor")
+class SelfDebugger:
+    def __init__(self, config: Optional[SPARConfig] = None):
+        self.config = config or SPARConfig.from_env()
+        self.model_manager = LocalModelManager()
+        self.model_manager.initialize(self.config)
+        self.logger = logging.getLogger("SelfDebugger")
         if not self.logger.hasHandlers():
             handler = logging.StreamHandler()
             formatter = logging.Formatter('[%(asctime)s] %(levelname)s - %(message)s')
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
         self.logger.setLevel(logging.INFO)
+        self.debug_templates = self._load_debug_templates()
 
-    def _extract_assistant_response(self, full_output: str) -> str:
-        """Extract only the assistant's response from the full conversation."""
+    def _load_debug_templates(self) -> Dict[str, str]:
+        """Load debug templates from debug_templates.yaml."""
         try:
-            full_output = str(full_output)
-            
-            # Look for the assistant's response pattern
-            assistant_pattern = r"'role': 'assistant', 'content': '([^']*)'"
-            match = re.search(assistant_pattern, full_output)
-            if match:
-                return match.group(1)
-            
-            # Alternative pattern for different quote styles
-            assistant_pattern2 = r"'role': 'assistant', 'content': \"([^\"]*)\""
-            match = re.search(assistant_pattern2, full_output)
-            if match:
-                return match.group(1)
-            
-            # Fallback: look for content after the last assistant marker
-            if "'role': 'assistant'" in full_output:
-                parts = full_output.split("'role': 'assistant'")
-                if len(parts) > 1:
-                    last_part = parts[-1]
-                    content_match = re.search(r"'content': '([^']*)'", last_part)
-                    if content_match:
-                        return content_match.group(1)
-                    
-                    content_match2 = re.search(r"'content': \"([^\"]*)\"", last_part)
-                    if content_match2:
-                        return content_match2.group(1)
-            
-            return full_output
-            
+            with open("app/templates/debug_templates.yaml", "r") as file:
+                return yaml.safe_load(file) or {}
         except Exception as e:
-            self.logger.error(f"Error extracting assistant response: {e}")
-            return str(full_output)
+            self.logger.error(f"Error loading debug templates: {e}")
+            return {}
 
     def _clean_text(self, text: str) -> str:
         """Clean text by removing escape sequences and formatting properly."""
         if not text:
             return ""
-        
-        # Replace \n with actual newlines
         text = text.replace('\\n', '\n')
-        # Remove extra whitespace
         text = re.sub(r'\n\s*\n', '\n\n', text)
-        # Clean up leading/trailing whitespace
-        text = text.strip()
-        
-        return text
+        return text.strip()
 
-    def _llm_prompt(self, structured_prompt: str) -> str:
-        if self.pipe is None:
-            self.logger.error("LLM pipe is not set. Cannot generate LLM response.")
-            return "Error: LLM pipe is not available."
+    def _llm_prompt(self, code: str, error: str, test_results: Dict[str, Any]) -> str:
+        """Generate a prompt for the LLM to debug the code based on test errors."""
+        if not self.model_manager.is_initialized():
+            self.logger.error("Model not initialized. Cannot generate LLM response.")
+            return "Error: Model not initialized."
+        
         prompt = [
             {
                 "role": "system",
                 "content": (
-                    "You are an expert DSA problem classifier. "
-                    "Classify problems as SIMPLE, MEDIUM, or COMPLEX, using the following human-like reasoning:\n"
-                    "- SIMPLE: Direct, can be solved with basic loops/conditionals, no tricky edge cases, no advanced data structures, and the main idea is immediately clear. "
-                    "Ignore any extra fluff or verbose description if the core logic is simple.\n"
-                    "- MEDIUM: Needs a specific algorithm or data structure (e.g., binary search, sorting, basic tree/graph traversal), or has a few edge cases, or requires some non-trivial insight, but is not deeply layered or highly optimized.\n"
-                    "- COMPLEX: Needs multiple algorithms, advanced data structures (e.g., segment trees, DP, complex graphs), many edge cases, or requires careful decomposition and planning. "
-                    "If a human would need to pause and plan subtasks, or if the problem is likely to be >50 lines of code, it's COMPLEX.\n"
-                    "Always reason as an expert teacher would, not just by code length or keywords."
+                    "You are an expert code debugger. Analyze the provided code, error message, and test results, "
+                    "then suggest a fix for the error. Use the following approach:\n"
+                    "- Identify the root cause of the error.\n"
+                    "- If a debug template exists for the error type, apply it.\n"
+                    "- Otherwise, propose a logical fix ensuring the function returns a boolean.\n"
+                    "- Avoid input() or print() statements.\n"
+                    "- Return the fixed code in a code block (```python\n<fixed_code>\n```) and a brief explanation."
                 )
             },
             {
                 "role": "user",
                 "content": (
-                    "Classify the following DSA problem as SIMPLE, MEDIUM, or COMPLEX.\n"
-                    "Respond in this format:\n"
-                    "Classification: <SIMPLE/MEDIUM/COMPLEX>\n"
-                    "Explanation: <your reasoning>\n"
-                    "ONLY if the problem is COMPLEX, also provide:\n"
-                    "Subtasks:\n"
-                    "Step 1: <description>\n"
-                    "Step 2: <description>\n"
-                    "...\n\n"
-                    "DSA Problem:\n"
-                    f"{structured_prompt}"
+                    "Debug the following code based on the error and test results:\n\n"
+                    "Code:\n```python\n"
+                    f"{code}\n"
+                    "```\n\n"
+                    "Error Message:\n"
+                    f"{error}\n\n"
+                    "Test Results:\n"
+                    f"{test_results}\n\n"
+                    "Provide the fixed code with signature def solution(n: int) -> bool and a brief explanation."
                 )
             }
         ]
-        self.logger.info("Prompting LLM for classification and decomposition...")
+        self.logger.info("Prompting LLM for code debugging...")
         
         try:
-            outputs = self.pipe(prompt)
-            
-            # Extract the generated text
-            if isinstance(outputs, list):
-                if len(outputs) > 0 and isinstance(outputs[0], dict) and "generated_text" in outputs[0]:
-                    result = outputs[0]["generated_text"]
-                elif len(outputs) > 0 and isinstance(outputs[0], str):
-                    result = outputs[0]
-                else:
-                    result = str(outputs[0])
-            elif isinstance(outputs, dict) and "generated_text" in outputs:
-                result = outputs["generated_text"]
-            elif isinstance(outputs, str):
-                result = outputs
-            else:
-                result = str(outputs)
-            
+            result = self.model_manager.generate_content(prompt)
             self.logger.info("LLM response received.")
-            
-            # Extract only the assistant's response
-            clean_response = self._extract_assistant_response(result)
-            self.logger.info(f"Cleaned response: {clean_response[:100]}...")
-            
-            return clean_response
-            
+            return self._clean_text(result)
         except Exception as e:
             self.logger.error(f"Error in LLM prompt: {e}")
             return f"Error generating response: {str(e)}"
 
-    def __call__(self, input_dict):
+    def _apply_debug_template(self, code: str, error: str) -> Optional[str]:
+        """Apply a debug template if available for the error type."""
+        error_type = self._extract_error_type(error)
+        if error_type in self.debug_templates:
+            try:
+                template = self.debug_templates[error_type]
+                func_match = re.search(r'def\s+(\w+)\s*\((.*?)\):', code)
+                if func_match:
+                    func_name = func_match.group(1)
+                    params = func_match.group(2)
+                    param_list = [p.strip() for p in params.split(',') if p.strip()]
+                    fixed_code = template.replace('{{func_name}}', func_name)
+                    fixed_code = fixed_code.replace('{{params}}', params)
+                    fixed_code = fixed_code.replace('{{param_list[0]}}', param_list[0] if param_list else 'n')
+                    body_match = re.search(r'def\s+\w+\s*\(.*?\):\s*(.*?)$', code, re.DOTALL)
+                    original_body = body_match.group(1) if body_match else ''
+                    fixed_code = fixed_code.replace('{{original_body}}', original_body)
+                    return fixed_code
+            except Exception as e:
+                self.logger.error(f"Error applying debug template: {e}")
+        return None
+
+    def _extract_error_type(self, error: str) -> str:
+        """Extract the error type from the error message."""
+        match = re.search(r'(?i)(TypeError|ValueError|TimeoutError|IndexError|KeyError|AttributeError)', error)
+        return match.group(1) if match else "UnknownError"
+
+    def __call__(self, input_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """Debug the code based on test results and errors."""
         try:
-            structured_prompt = input_dict.get("structured_prompt", "")
-            if not structured_prompt:
-                raise ValueError("Input must contain 'structured_prompt'.")
-            if self.pipe is None:
-                self.logger.error("LLM pipe is not set. Returning fallback error.")
+            code = input_dict.get("code", "")
+            test_results = input_dict.get("test_results", {})
+            error = test_results.get("error", "") or input_dict.get("error", "")
+            
+            if not code or not error:
+                raise ValueError("Input must contain 'code' and 'error' or 'test_results' with an error.")
+            
+            if not self.model_manager.is_initialized():
+                self.logger.error("Model not initialized. Returning fallback error.")
                 return {
-                    "llm_response": "Error: LLM pipe is not available.",
-                    "classification": "ERROR",
-                    "explanation": "LLM pipe is not set. Cannot classify or decompose.",
-                    "subtasks": None
+                    "fixed_code": code,
+                    "debug_explanation": "Error: Model not initialized.",
+                    "success": False
                 }
-            llm_output = self._llm_prompt(structured_prompt)
             
-            # Ensure llm_output is a string
-            if not isinstance(llm_output, str):
-                llm_output = str(llm_output)
+            fixed_code = self._apply_debug_template(code, error)
+            if fixed_code:
+                self.logger.info("Applied debug template successfully.")
+                return {
+                    "fixed_code": fixed_code,
+                    "debug_explanation": f"Applied debug template for {self._extract_error_type(error)}.",
+                    "success": True
+                }
             
-            # Clean the text
-            llm_output = self._clean_text(llm_output)
+            llm_output = self._llm_prompt(code, error, test_results)
             
-            # Parse the output
-            classification = "UNKNOWN"
-            explanation = ""
-            subtasks = []
-            
-            # Extract classification
-            class_match = re.search(r"Classification:\s*(SIMPLE|MEDIUM|COMPLEX)", llm_output, re.IGNORECASE)
-            if class_match:
-                classification = class_match.group(1).upper()
-            
-            # Extract explanation (stop at Subtasks:)
-            explanation_match = re.search(r"Explanation:\s*(.*?)(?=\nSubtasks:|\Z)", llm_output, re.DOTALL | re.IGNORECASE)
-            if explanation_match:
-                explanation = explanation_match.group(1).strip()
-                # Clean the explanation
-                explanation = self._clean_text(explanation)
-            
-            # Extract subtasks (only from the Subtasks: section)
-            if "Subtasks:" in llm_output:
-                subtasks_section = llm_output.split("Subtasks:")[-1]
-                # Look for Step patterns
-                step_pattern = re.compile(r'Step\s+\d+:\s*(.*?)(?=\nStep\s+\d+:|$)', re.DOTALL | re.IGNORECASE)
-                step_matches = step_pattern.findall(subtasks_section)
-                
-                for i, step_content in enumerate(step_matches, 1):
-                    cleaned_step = self._clean_text(step_content)
-                    subtasks.append({
-                        "step": f"Step {i}",
-                        "description": cleaned_step
-                    })
+            code_match = re.search(r'```python\n(.*?)```', llm_output, re.DOTALL)
+            fixed_code = code_match.group(1).strip() if code_match else code
+            explanation_match = re.search(r'Explanation:\s*(.*?)(?=\n```|\Z)', llm_output, re.DOTALL)
+            debug_explanation = explanation_match.group(1).strip() if explanation_match else "No explanation provided."
+            debug_explanation = self._clean_text(debug_explanation)
             
             return {
-                "llm_response": llm_output,
-                "classification": classification,
-                "explanation": explanation,
-                "subtasks": subtasks if subtasks else None
+                "fixed_code": fixed_code,
+                "debug_explanation": debug_explanation,
+                "success": bool(code_match)
             }
             
         except Exception as e:
             self.logger.error(f"Error in __call__: {e}")
             return {
-                "llm_response": f"Error: {str(e)}",
-                "classification": "ERROR",
-                "explanation": f"An error occurred: {str(e)}",
-                "subtasks": None
+                "fixed_code": input_dict.get("code", ""),
+                "debug_explanation": f"Error during debugging: {str(e)}",
+                "success": False
             }
-
-# Singleton agent instance
-agent = SubtaskDistributor(llm_pipe)
-
-def run_subtask_distributor(structured_prompt: str):
-    return agent({"structured_prompt": structured_prompt})

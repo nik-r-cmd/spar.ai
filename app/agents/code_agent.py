@@ -1,38 +1,104 @@
-# app/agents/code_agent.py
+import re
+import ast
 import logging
-from typing import Dict, Any
-from app.agents.base_agent import LocalModelManager, handle_errors
+from typing import Optional
+from .base_agent import LocalModelManager, handle_errors, SPARConfig
 
-LOGGER = logging.getLogger("CodeAgent")
-if not LOGGER.hasHandlers():
-    h = logging.StreamHandler()
-    h.setFormatter(logging.Formatter('[%(asctime)s] %(levelname)s - %(message)s'))
-    LOGGER.addHandler(h)
-LOGGER.setLevel(logging.INFO)
-
+logger = logging.getLogger(__name__)
 
 class CodeAgent:
-    def __init__(self):
+    """Agent responsible for generating Python code solutions"""
+    
+    def __init__(self, config: SPARConfig):
+        self.config = config
+        self.model_manager = LocalModelManager()
+        self.model_manager.initialize(config)
+        logger.info("CodeAgent initialized")
+
+    @handle_errors
+    def generate_code(self, problem: str, signature: Optional[str] = None) -> str:
+        """Generate code solution for the given problem"""
+        # Use provided signature or default one
+        if not signature:
+            signature = "def solution(*args, **kwargs):\n    pass"
+
+        prompt = [
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert Python programmer. Generate a function that solves the given problem. "
+                    "Follow the exact function signature provided. "
+                    "Do not use input() or print() statements. "
+                    "Include error handling for invalid inputs when appropriate. "
+                    "Return only the Python function code inside a code block."
+                )
+            },
+            {
+                "role": "user",
+                "content": f"""Solve this problem:
+
+{problem}
+
+Requirements:
+- Use the exact function signature: {signature.splitlines()[0]}
+- Handle edge cases where applicable
+- Do not use input() or print()
+- Include error handling with appropriate exceptions
+- Return only the function code in a code block
+
+Example format:
+```python
+{signature}
+    # your code here
+```"""
+            }
+        ]
+
         try:
-            self.pipe = LocalModelManager.get_pipeline()
-            LOGGER.info("CodeAgent connected to global pipeline.")
+            response = self.model_manager.generate_content(prompt)
+            code = self._extract_code_from_response(response)
+            if not code:
+                logger.warning("No valid code extracted from response")
+                return ""
+            return code
         except Exception as e:
-            LOGGER.error("Failed to get pipeline for CodeAgent: %s", e)
-            self.pipe = None
+            logger.error(f"Code generation failed: {e}")
+            return ""
 
-    @handle_errors(default_return={"error": "code generation failed"})
-    def generate_code(self, refined_prompt: str, max_new_tokens: int = 512) -> Dict[str, Any]:
-        if self.pipe is None:
-            raise RuntimeError("LLM pipeline not available for code generation")
-        LOGGER.info("CodeAgent generating code from prompt (len=%d)", len(refined_prompt))
-        outputs = self.pipe(refined_prompt, max_new_tokens=max_new_tokens, do_sample=False)
-        # try to extract generated_text
-        if isinstance(outputs, list) and len(outputs) > 0 and isinstance(outputs[0], dict) and "generated_text" in outputs[0]:
-            return {"generated_code": outputs[0]["generated_text"]}
-        if isinstance(outputs, dict) and "generated_text" in outputs:
-            return {"generated_code": outputs["generated_text"]}
-        return {"generated_code": str(outputs)}
+    def _extract_code_from_response(self, response: str) -> str:
+        """Extract Python code from model response and validate it"""
+        # Try matching fenced code block first
+        match = re.search(r'```(?:python)?\s*\n(.*?)```', response, re.DOTALL | re.IGNORECASE)
+        if match:
+            code = match.group(1).strip()
+            if self._is_valid_code(code):
+                return code
+        
+        # Fallback: try grabbing function definition manually
+        lines = response.splitlines()
+        code_lines = []
+        in_function = False
+        
+        for line in lines:
+            if line.strip().startswith('def '):
+                in_function = True
+                code_lines.append(line)
+            elif in_function:
+                if line.strip() and not (line.startswith(' ') or line.startswith('\t')):
+                    break
+                code_lines.append(line)
+        
+        code = "\n".join(code_lines).strip()
+        if code and self._is_valid_code(code):
+            return code
+        
+        logger.warning("No valid Python function found in response")
+        return ""
 
-
-# If other modules expect LocalModelManager, CodeAgent, etc. they can import these names
-LocalModelManager = LocalModelManager
+    def _is_valid_code(self, code: str) -> bool:
+        """Validate if the code is a syntactically correct Python function"""
+        try:
+            parsed = ast.parse(code)
+            return any(isinstance(node, ast.FunctionDef) for node in parsed.body)
+        except SyntaxError:
+            return False
