@@ -117,6 +117,12 @@ divide_and_conquer:
   method: "Use divide and conquer to break problem into subproblems."
   edge_cases: "Single element, empty array."
   keywords: ["divide and conquer", "split array", "merge results", "combine solutions", "recursive split", "conquer subproblems"]
+  
+primality_test:
+  signature: "def is_prime(n: int) -> bool:"
+  method: "Use trial division up to square root of n to check for primality."
+  edge_cases: "Handle n <= 1, negative numbers, and large integers."
+  keywords: ["prime", "primality", "divisor"]
 
 default:
   signature: "def solution():"

@@ -82,24 +82,21 @@ async def run_pra(request: PRARequest):
 @app.post("/api/full-pipeline")
 async def run_full_pipeline(request: FullPipelineRequest):
     """Run the complete SPAR pipeline including code generation, testing, and debugging"""
+    logger.info(f"Full pipeline request received: {request.dict()}")
     try:
         spar = get_spar_system()
 
-        # If refined_prompt already exists, skip TUA/STD/PRA
+        # Check if refined_prompt is provided, otherwise run TUA/STD/PRA
         if request.refined_prompt:
             logger.info("Using provided refined_prompt, skipping TUA/STD/PRA.")
             code_prompt = request.refined_prompt
-            signature = request.signature
-            edge_cases = request.edge_cases
-
+            signature = request.signature or "def solution(*args, **kwargs):"
+            edge_cases = request.edge_cases or "Handle all relevant edge cases"
         else:
-            logger.info(f"Prompt received by TUA: {request.user_prompt}")
+            logger.info(f"Processing prompt: {request.user_prompt}")
 
             # Step 1 - TUA
-            task_data = {
-                "original_prompt": request.user_prompt,
-                "language": request.language,
-            }
+            task_data = {"original_prompt": request.user_prompt, "language": request.language}
             tua_result = generate_structured_prompt(task_data)
             logger.info(f"TUA output: {tua_result}")
 
@@ -110,40 +107,33 @@ async def run_full_pipeline(request: FullPipelineRequest):
             })
             logger.info(f"STD output: {std_result}")
 
-            # Step 3 - PRA (unwrap std_result if wrapped)
+            # Step 3 - PRA
             std_for_pra = std_result.get("std_result", std_result)
-            try:
-                refined_prompts_data = PromptRefinerAgent().refine(tua_result, std_for_pra)
-            except Exception as e:
-                logger.warning(f"PRA merge failed, using default prompt. Error: {e}")
-                refined_prompts_data = {"refined_prompts": []}
-
+            refined_prompts_data = PromptRefinerAgent().refine(tua_result, std_for_pra)
             logger.info(f"PRA output: {refined_prompts_data}")
 
             refined_prompts = refined_prompts_data.get("refined_prompts", [])
             code_prompt = refined_prompts[0]["refined_prompt"] if refined_prompts else (
                 f"# Language: {request.language}\n"
                 f"# Task: {request.user_prompt}\n"
-                f"# Signature: {request.signature or 'def solution(*args, **kwargs):'}\n"
-                f"# Instructions: Write a complete solution in the specified language for the task above. "
-                f"Handle all relevant edge cases. Do not use input() or print() unless explicitly required."
+                f"# Signature: {request.signature or tua_result.get('signature', 'def solution(*args, **kwargs):')}\n"
+                f"# Instructions: Write a complete solution. Handle all relevant edge cases."
             )
             signature = request.signature or tua_result.get("signature", "def solution(*args, **kwargs):")
             edge_cases = request.edge_cases or tua_result.get("edge_cases", "Handle all relevant edge cases")
 
-        # Step 4 - CodeAgent onwards
-        result = spar.solve_problem(
-            request.user_prompt,
-            code_prompt,
-            signature,
-            edge_cases
-        )
+        logger.info(f"Calling solve_problem with: code_prompt={code_prompt[:50]}..., signature={signature}, edge_cases={edge_cases}")
+        # Step 4 - Solve Problem
+        result = spar.solve_problem(request.user_prompt, code_prompt, signature, edge_cases)
         logger.info(f"Full pipeline result: {result}")
         return result
 
+    except ValueError as ve:
+        logger.error(f"Validation error in full pipeline: {str(ve)}", exc_info=True)
+        return {"error": "Validation failed", "status": "failed", "details": str(ve)}
     except Exception as e:
         logger.error(f"Error in full pipeline: {str(e)}", exc_info=True)
-        return {"error": str(e), "status": "failed"}
+        return {"error": "Processing failed", "status": "failed", "details": str(e)}
 
 # ---------- Other Endpoints ----------
 @app.post("/api/code-generation")

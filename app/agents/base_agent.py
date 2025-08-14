@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SPARConfig:
     """Configuration for SPAR system"""
-    model_name: str = "Qwen/Qwen1.5-7B-Chat"
+    model_name: str = "codellama/CodeLlama-7b-Instruct-hf"
     device: str = "auto"  # Change to "cpu" for testing without GPU
     max_new_tokens: int = 512
     temperature: float = 0.3

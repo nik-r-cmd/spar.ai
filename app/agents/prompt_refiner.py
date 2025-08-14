@@ -45,6 +45,7 @@ class PromptRefinerAgent:
         logger.info(f"Generated base prompt: {prompt}")
         return prompt
 
+    # In prompt_refiner.py, update _llm_polish
     def _llm_polish(self, prompt):
         if not self.model_manager.is_initialized():
             logger.warning("Model not initialized, returning unpolished prompt")
@@ -55,7 +56,8 @@ class PromptRefinerAgent:
             "- Clear and unambiguous\n"
             "- Explicit about function signature, input/output, constraints, and edge cases\n"
             "- Concise, but with all necessary details\n"
-            "- Ready for a code LLM to generate a robust solution"
+            "- Ready for a code LLM to generate a robust solution\n"
+            "- Do NOT include the actual code implementation or test cases; only describe what the solution should do."
         )
         full_prompt = f"{system_prompt}\n\n{prompt}"
         try:
@@ -67,22 +69,19 @@ class PromptRefinerAgent:
             return polished.strip()
         except Exception as e:
             logger.error(f"Error in LLM polish: {str(e)}")
-            return prompt  # Fallback to unpolished prompt on error
+            return prompt
 
     def refine(self, tua, std):
         try:
-            # Log inputs for debugging
             logger.info(f"TUA input: {tua}")
             logger.info(f"STD input: {std}")
 
-            # Classification and base prompt handling
             classification = std.get("classification", "UNKNOWN")
             method_used = tua.get("method_used", "")
             original_prompt = tua.get("original_prompt", "")
 
             logger.info(f"Classification: {classification}, Method: {method_used}")
 
-            # Fallback if invalid
             if classification == "UNKNOWN" or not method_used or not original_prompt:
                 logger.warning("Falling back to default prompt due to invalid TUA/STD")
                 return {
@@ -98,13 +97,13 @@ class PromptRefinerAgent:
                     }]
                 }
 
-            # SIMPLE classification or no subtasks
+            # For SIMPLE or no subtasks, generate a single refined prompt
             if classification == "SIMPLE" or not std.get("subtasks"):
                 base_prompt = self._template_prompt(tua, std)
                 polished = self._llm_polish(base_prompt)
                 return {"refined_prompts": [{"subtask": "Complete Solution", "refined_prompt": polished}]}
 
-            # MEDIUM/COMPLEX: generate prompts for each subtask
+            # For COMPLEX: generate prompts for each subtask
             prompts = []
             for i, sub in enumerate(std.get("subtasks", []), 1):
                 subtask_desc = sub.get("description", "")
@@ -152,5 +151,4 @@ Please provide a corrected solution that:
 4. Uses clear, efficient Python code
 
 Corrected solution:"""
-        
         return refined_prompt

@@ -18,7 +18,6 @@ class SubtaskDistributor:
     def _extract_assistant_response(self, full_output: str) -> str:
         """Extract the assistant's response, assuming it's already a clean string."""
         try:
-            # Since LocalModelManager.generate_content returns a clean string, return it directly
             return str(full_output).strip()
         except Exception as e:
             self.logger.error(f"Error extracting assistant response: {e}")
@@ -28,15 +27,9 @@ class SubtaskDistributor:
         """Clean text by removing escape sequences and formatting properly."""
         if not text:
             return ""
-        
-        # Replace \n with actual newlines
         text = text.replace('\\n', '\n')
-        # Remove extra whitespace
         text = re.sub(r'\n\s*\n', '\n\n', text)
-        # Clean up leading/trailing whitespace
-        text = text.strip()
-        
-        return text
+        return text.strip()
 
     def _llm_prompt(self, structured_prompt: str) -> str:
         if not self.model_manager.is_initialized():
@@ -47,21 +40,20 @@ class SubtaskDistributor:
                 "role": "system",
                 "content": (
                     "You are an expert DSA problem classifier. "
-                    "Classify problems as SIMPLE, MEDIUM, or COMPLEX, using the following human-like reasoning:\n"
+                    "Classify problems as SIMPLE or COMPLEX, using the following human-like reasoning:\n"
                     "- SIMPLE: Direct, can be solved with basic loops/conditionals, no tricky edge cases, no advanced data structures, and the main idea is immediately clear. "
                     "Examples include checking if a number is prime, factorial, or basic array operations.\n"
-                    "- MEDIUM: Needs a specific algorithm or data structure (e.g., binary search, sorting, basic tree/graph traversal), or has a few edge cases, or requires some non-trivial insight, but is not deeply layered or highly optimized.\n"
                     "- COMPLEX: Needs multiple algorithms, advanced data structures (e.g., segment trees, DP, complex graphs), many edge cases, or requires careful decomposition and planning. "
-                    "If a human would need to pause and plan subtasks, or if the problem is likely to be >50 lines of code, it's COMPLEX.\n"
+                    "Includes tasks that would have been MEDIUM (e.g., specific algorithms like binary search or sorting with some edge cases) or more complex. If a human would need to pause and plan subtasks, or if the problem is likely to be >50 lines of code, it's COMPLEX.\n"
                     "Always reason as an expert teacher would, not just by code length or keywords. For numerical problems like prime number checking, prefer SIMPLE unless explicitly complex."
                 )
             },
             {
                 "role": "user",
                 "content": (
-                    "Classify the following DSA problem as SIMPLE, MEDIUM, or COMPLEX.\n"
+                    "Classify the following DSA problem as SIMPLE or COMPLEX.\n"
                     "Respond in this format:\n"
-                    "Classification: <SIMPLE/MEDIUM/COMPLEX>\n"
+                    "Classification: <SIMPLE/COMPLEX>\n"
                     "Explanation: <your reasoning>\n"
                     "ONLY if the problem is COMPLEX, also provide:\n"
                     "Subtasks:\n"
@@ -81,7 +73,6 @@ class SubtaskDistributor:
             clean_response = self._extract_assistant_response(result)
             self.logger.info(f"Cleaned response: {clean_response[:100]}...")
             return clean_response
-            
         except Exception as e:
             self.logger.error(f"Error in LLM prompt: {e}")
             return f"Error generating response: {str(e)}"
@@ -101,34 +92,26 @@ class SubtaskDistributor:
                 }
             llm_output = self._llm_prompt(structured_prompt)
             
-            # Ensure llm_output is a string
             if not isinstance(llm_output, str):
                 llm_output = str(llm_output)
             
-            # Clean the text
             llm_output = self._clean_text(llm_output)
             
-            # Parse the output
             classification = "UNKNOWN"
             explanation = ""
             subtasks = []
             
-            # Extract classification
-            class_match = re.search(r"Classification:\s*(SIMPLE|MEDIUM|COMPLEX)", llm_output, re.IGNORECASE)
+            class_match = re.search(r"Classification:\s*(SIMPLE|COMPLEX)", llm_output, re.IGNORECASE)
             if class_match:
                 classification = class_match.group(1).upper()
             
-            # Extract explanation (stop at Subtasks:)
             explanation_match = re.search(r"Explanation:\s*(.*?)(?=\nSubtasks:|\Z)", llm_output, re.DOTALL | re.IGNORECASE)
             if explanation_match:
                 explanation = explanation_match.group(1).strip()
-                # Clean the explanation
                 explanation = self._clean_text(explanation)
             
-            # Extract subtasks (only from the Subtasks: section)
             if classification == "COMPLEX" and "Subtasks:" in llm_output:
                 subtasks_section = llm_output.split("Subtasks:")[-1]
-                # Look for Step patterns
                 step_pattern = re.compile(r'Step\s+\d+:\s*(.*?)(?=\nStep\s+\d+:|$)', re.DOTALL | re.IGNORECASE)
                 step_matches = step_pattern.findall(subtasks_section)
                 
@@ -145,7 +128,6 @@ class SubtaskDistributor:
                 "explanation": explanation,
                 "subtasks": subtasks if subtasks else None
             }
-            
         except Exception as e:
             self.logger.error(f"Error in __call__: {e}")
             return {
@@ -155,7 +137,6 @@ class SubtaskDistributor:
                 "subtasks": None
             }
 
-# Singleton agent instance
 agent = SubtaskDistributor()
 
 def run_subtask_distributor(structured_prompt: str):
