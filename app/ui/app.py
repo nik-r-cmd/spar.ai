@@ -1,3 +1,4 @@
+# Full updated app.py with fixes
 import sys
 import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -9,6 +10,7 @@ import streamlit as st
 from app.modules import input_handler
 import traceback
 import requests
+import re  # For parsing subtasks if needed
 
 # Page configuration
 st.set_page_config(
@@ -45,15 +47,15 @@ with st.sidebar:
             st.markdown(f'<div class="sidebar-history-entry">'
                         f'<b>{entry.get("language", "").capitalize()}</b> | '
                         f'{entry.get("original_prompt", "")[:40]}...'
-                        f'<br><span style="font-size:0.9em;color:#a5b4fc;">{entry.get("timestamp", "")}</span>'
+                        f'<br><span style="font-size:0.9em;color:#1d9bf0;">{entry.get("timestamp", "")}</span>'
                         f'</div>', unsafe_allow_html=True)
     else:
-        st.markdown('<span style="color:#888;">No history yet.</span>', unsafe_allow_html=True)
+        st.markdown('<span style="color:#aaaaaa;">No history yet.</span>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 # --- Main area title and subtitle ---
-st.markdown('<div style="text-align:center;margin-top:2em;margin-bottom:0.5em;font-family:Inter,Segoe UI,Poppins,sans-serif;font-weight:800;font-size:3em;letter-spacing:0.01em;">SPAR</div>', unsafe_allow_html=True)
-st.markdown('<div style="text-align:center;margin-bottom:2.5em;font-family:Inter,Segoe UI,Poppins,sans-serif;font-weight:400;font-size:1.2em;color:#b3b3c6;">spar.ai: Agentic Code Reasoning Assistant</div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align:center;margin-top:2em;margin-bottom:0.5em;font-weight:800;font-size:3em;letter-spacing:0.01em;">SPAR</div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align:center;margin-bottom:2.5em;font-weight:400;font-size:1.2em;color:#aaaaaa;">spar.ai: Agentic Code Reasoning Assistant</div>', unsafe_allow_html=True)
 
 # --- Prompt input row ---
 col1, col2 = st.columns([8,1], gap="small")
@@ -77,24 +79,24 @@ with col2:
         args={"aria-label": "Submit DSA problem"}
     )
 
-# --- Custom CSS for glassmorphism and UI polish ---
+# --- Custom CSS for Grok-like design: Dark, minimalist, blue accents, clean cards ---
 st.markdown(
     """
     <style>
     html, body, .stApp {
-        background: #0a0a0a !important;
-        color: #f3f4f6 !important;
-        font-family: 'Inter', 'Segoe UI', 'Poppins', Arial, sans-serif !important;
+        background: #000000 !important;
+        color: #ffffff !important;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
     }
     .stSidebar {
-        background: #18181b !important;
+        background: #0a0a0a !important;
         border-radius: 0 18px 18px 0;
-        box-shadow: 0 4px 32px 0 rgba(36,37,46,0.18);
+        box-shadow: 0 4px 32px 0 rgba(29, 155, 240, 0.1);
     }
     .sidebar-title {
         font-size: 1.3em;
         font-weight: 700;
-        color: #b3b3c6;
+        color: #ffffff;
         margin-bottom: 0.5em;
         margin-top: 0.5em;
         letter-spacing: 0.01em;
@@ -106,31 +108,29 @@ st.markdown(
         padding-right: 0.5em;
     }
     .sidebar-history-entry {
-        background: rgba(36,37,46,0.7);
+        background: #0a0a0a;
         border-radius: 8px;
         margin-bottom: 0.5em;
         padding: 0.7em 1em;
         font-size: 1em;
-        color: #b3b3c6;
-        border-left: 3px solid #35354a;
+        color: #aaaaaa;
         transition: background 0.2s;
     }
     .sidebar-history-entry:hover {
-        background: #232336;
+        background: #1a1a1a;
     }
     .stTextArea textarea {
-        background: rgba(36,37,46,0.7) !important;
-        color: #b3b3c6 !important;
+        background: #0a0a0a !important;
+        color: #ffffff !important;
         border-radius: 18px !important;
         font-size: 1.2em !important;
-        font-family: 'Inter', 'Segoe UI', 'Poppins', Arial, sans-serif !important;
-        box-shadow: 0 2px 12px 0 rgba(36,37,46,0.10);
-        border: 2px solid #a5b4fc !important;
+        box-shadow: 0 2px 12px 0 rgba(29, 155, 240, 0.1);
+        border: 1px solid #1d9bf0 !important;
         padding: 1.2em 1.5em !important;
     }
     .stButton>button {
-        background: rgba(36,37,46,0.7);
-        color: #b3b3c6;
+        background: #1d9bf0;
+        color: #ffffff;
         border-radius: 18px;
         font-weight: 700;
         font-size: 1.3em;
@@ -138,42 +138,34 @@ st.markdown(
         padding: 0.7em 1.2em;
         margin-top: 0.5em;
         margin-bottom: 0.5em;
-        box-shadow: 0 2px 12px 0 rgba(36,37,46,0.10);
+        box-shadow: 0 2px 12px 0 rgba(29, 155, 240, 0.2);
         transition: box-shadow 0.2s;
         outline: none !important;
     }
-    .stButton>button:focus, .stButton>button:active {
-        outline: none !important;
-        border: none !important;
-        box-shadow: none !important;
-    }
     .stButton>button:hover {
-        box-shadow: 0 4px 24px 0 rgba(36,37,46,0.18);
-        background: rgba(53,53,74,0.7);
-        outline: none !important;
-        border: none !important;
+        box-shadow: 0 4px 24px 0 rgba(29, 155, 240, 0.3);
+        background: #0a84ff;
     }
     .glass-card {
-        background: rgba(36,37,46,0.7);
-        backdrop-filter: blur(8px);
+        background: #0a0a0a;
         border-radius: 1.5em;
-        padding: 1.5em 1.7em;
+        padding: 1.5em;
         margin-bottom: 2em;
-        box-shadow: 0 4px 32px 0 rgba(165,180,252,0.10);
-        border: 1.5px solid #232336;
+        box-shadow: 0 4px 32px 0 rgba(29, 155, 240, 0.1);
+        border: 1px solid rgba(29, 155, 240, 0.2);
         transition: all 0.3s ease;
     }
     .glass-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 40px 0 rgba(165,180,252,0.15);
+        box-shadow: 0 6px 40px 0 rgba(29, 155, 240, 0.15);
     }
     .subtask-box {
-        background: rgba(36,37,46,0.7);
+        background: #1a1a1a;
         border-radius: 12px;
-        padding: 1.1em 1.3em;
-        margin-bottom: 0.7em;
-        box-shadow: 0 2px 8px 0 rgba(165,180,252,0.07);
-        border: 1px solid #35354a;
+        padding: 1em;
+        margin-bottom: 1em;
+        box-shadow: 0 2px 8px 0 rgba(29, 155, 240, 0.05);
+        border: 1px solid rgba(29, 155, 240, 0.1);
     }
     .subtask-status {
         margin-left: 0.7em;
@@ -183,16 +175,16 @@ st.markdown(
         padding: 0.2em 0.8em;
     }
     .subtask-complete {
-        background: #22c55e;
-        color: #fff;
+        background: #1d9bf0;
+        color: #ffffff;
     }
     .subtask-pending {
         background: #fbbf24;
-        color: #232336;
+        color: #000000;
     }
     .subtask-failed {
         background: #ef4444;
-        color: #fff;
+        color: #ffffff;
     }
     </style>
     """,
@@ -252,10 +244,11 @@ if send_clicked and prompt_text.strip():
             )
         if std_response.status_code == 200:
             std_result = std_response.json()
-            st.session_state.std_output = std_result
+            std_data = std_result.get('std_result', std_result)  # Fix: Handle nested or direct dict
+            st.session_state.std_output = std_data
             st.markdown('<div class="glass-card">', unsafe_allow_html=True)
             st.markdown("<h4 style='margin-bottom:0.5em;'>Subtask Distributor (STD) <span class='subtask-status subtask-complete'>Completed</span></h4>", unsafe_allow_html=True)
-            classification = std_result.get("classification", "UNKNOWN")
+            classification = std_data.get("classification", "UNKNOWN")
             if classification == "SIMPLE":
                 st.success(f"**Classification: {classification}**")
             elif classification == "MEDIUM":
@@ -264,10 +257,17 @@ if send_clicked and prompt_text.strip():
                 st.error(f"**Classification: {classification}**")
             else:
                 st.info(f"**Classification: {classification}**")
-            explanation = std_result.get("explanation", "")
+            explanation = std_data.get("explanation", "")
             if explanation:
                 st.markdown(f'<div class="subtask-box"><b>Explanation:</b><br>{explanation}</div>', unsafe_allow_html=True)
-            subtasks = std_result.get("subtasks", [])
+            subtasks = std_data.get("subtasks", None)
+            if subtasks is None:
+                # Parse from llm_response if None
+                llm_resp = std_data.get("llm_response", "")
+                subtasks_match = re.search(r'Subtasks:\s*(.*)', llm_resp, re.DOTALL)
+                if subtasks_match:
+                    subtasks_text = subtasks_match.group(1).strip().split('\n')
+                    subtasks = [{'step': i+1, 'description': s.strip('* ').strip()} for i, s in enumerate(subtasks_text) if s.strip()]
             if subtasks:
                 st.markdown("**Subtasks:**")
                 for subtask in subtasks:
@@ -286,7 +286,7 @@ if send_clicked and prompt_text.strip():
     except Exception as e:
         st.error(f"Error in TUA/STD execution: {str(e)}")
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.markdown(f"<h4 style='margin-bottom:0.5em;'>Pipeline Error <span class='subtask-status subtask-failed'>Failed</span></h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='margin-bottom:0.5em;'>Pipeline Error <span class='subtask-status subtask-failed'>Failed</span></h4>", unsafe_allow_html=True)
         st.code(traceback.format_exc(), language="python")
         st.markdown('</div>', unsafe_allow_html=True)
         st.stop()
@@ -329,7 +329,6 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
                                 st.session_state["refined_prompt"] = refined_prompt
                 else:
                     st.warning("No refined prompts generated by PRA.")
-                    st.markdown('<span class="subtask-status subtask-pending">Pending</span>', unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
             else:
                 st.error(f"PRA API failed with status {pra_response.status_code}: {pra_response.text}")
@@ -384,7 +383,6 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
                     st.code(code, language="python")
             else:
                 st.warning("No code generated")
-                st.markdown('<span class="subtask-status subtask-pending">Pending</span>', unsafe_allow_html=True)
             code_source = pipeline_result.get("code_source", "unknown")
             st.markdown(f"**Source:** {code_source}", unsafe_allow_html=True)
             if st.button("Export Code", key="export_code"):
@@ -395,7 +393,9 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
             st.markdown('<div class="glass-card">', unsafe_allow_html=True)
             test_results = pipeline_result.get("test_results", {})
             status = test_results.get("status", "unknown")
-            st.markdown(f"<h4 style='margin-bottom:0.5em;'>Test Generation & Results <span class='subtask-status {'subtask-complete' if status == 'pass' else 'subtask-failed'}> {'Passed' if status == 'pass' else 'Failed'}</span></h4>", unsafe_allow_html=True)
+            status_class = 'subtask-complete' if status == 'pass' else 'subtask-failed'
+            status_text = 'Passed' if status == 'pass' else 'Failed'
+            st.markdown(f"<h4 style='margin-bottom:0.5em;'>Test Generation & Results <span class='subtask-status {status_class}'>{status_text}</span></h4>", unsafe_allow_html=True)
             if test_results:
                 passed = test_results.get("passed", 0)
                 total = test_results.get("total", 0)
@@ -417,10 +417,9 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
                     st.download_button("Download Tests", test_content, file_name="tests.py")
             else:
                 st.warning("No test results available")
-                st.markdown('<span class="subtask-status subtask-pending">Pending</span>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
-            # Self-Debug Box (only if tests failed and debug was triggered)
+            # Self-Debug Box
             if test_results.get("status") == "fail" and "debug_result" in pipeline_result:
                 st.markdown('<div class="glass-card">', unsafe_allow_html=True)
                 st.markdown("<h4 style='margin-bottom:0.5em;'>Self-Debug Agent <span class='subtask-status subtask-complete'>Completed</span></h4>", unsafe_allow_html=True)
@@ -455,7 +454,7 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
     except Exception as e:
         st.error(f"Pipeline error: {str(e)}")
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.markdown(f"<h4 style='margin-bottom:0.5em;'>Pipeline Error <span class='subtask-status subtask-failed'>Failed</span></h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='margin-bottom:0.5em;'>Pipeline Error <span class='subtask-status subtask-failed'>Failed</span></h4>", unsafe_allow_html=True)
         st.code(traceback.format_exc(), language="python")
         st.markdown('</div>', unsafe_allow_html=True)
 

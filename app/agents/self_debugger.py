@@ -1,3 +1,4 @@
+# self_debugger.py
 import logging
 import re
 from typing import Dict, Any, Optional
@@ -138,7 +139,7 @@ class SelfDebugger:
             code_match = re.search(r'```python\n(.*?)```', llm_output, re.DOTALL)
             fixed_code = code_match.group(1).strip() if code_match else code
             explanation_match = re.search(r'Explanation:\s*(.*?)(?=\n```|\Z)', llm_output, re.DOTALL)
-            debug_explanation = explanation_match.group(1).strip() if explanation_match else "No explanation provided."
+            debug_explanation = explanation_match.group(1).strip() if explanation_match else self._clean_text(llm_output) or "No explanation provided"
             debug_explanation = self._clean_text(debug_explanation)
             
             return {

@@ -1,3 +1,4 @@
+# tester_agent.py
 import os
 import ast
 import re
@@ -29,29 +30,30 @@ class TesterAgent:
             {
                 "role": "system",
                 "content": (
-                    "You are an expert Python test case generator specializing in robust DSA testing. "
-                    "Create 5-8 diverse test assertions, including extreme/large/weird inputs to stress-test the code."
+                    "You are an expert Python test case generator. "
+                    "Your job is to create diverse, valid Python test assertions for a given function."
                 )
             },
             {
                 "role": "user",
-                "content": f"""Generate 5-8 test cases for this function:
-        
-        Problem: {problem or "Solve the described problem."}
-        
-        Function code:
-        {code}
-        
-        Edge Cases: {edge_cases or "Include extremes: very large/small values, negatives, zeros, invalid types if applicable"}
-        Constraints: {constraints or "Test performance and correctness under stress"}
-        
-        Requirements:
-        - Format: assert {function_name}(input) == expected or pytest.raises(Exception, {function_name}, input)
-        - Cover: Normal cases, edges (e.g., min/max constraints), extremes (e.g., n=10^12, n=-10^9), weird (e.g., non-int if possible, overflows)
-        - Ensure assertions are valid Python; trigger failures to test debugging
-        - Return only assert statements, one per line
-        
-        Test cases:"""
+                "content": f"""Generate exactly 5 test cases for this Python function:
+
+Problem: {problem or "The problem description is provided above."}
+
+Function code:
+{code}
+
+Edge Cases: {edge_cases or "Include edge cases and invalid inputs"}
+Constraints: {constraints or "Follow performance and correctness requirements"}
+
+Requirements:
+- Generate 5 different test assertions
+- Use the format: assert {function_name}(input) == expected_output or assert_raises(Exception, {function_name}, input)
+- Cover both normal and edge cases
+- Ensure all test cases are valid Python assertions
+- Return only the assert statements, one per line
+
+Test cases:"""
             }
         ]
 
