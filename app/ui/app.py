@@ -109,7 +109,6 @@ st.markdown(
         box-shadow: 0 2px 12px 0 rgba(165, 180, 252, 0.10);
         margin-bottom: 1.2em !important;
     }
-    /* Professional, subtle boxes for explanation and subtasks */
     .explanation-box {
         background: #232336;
         color: #f3f4f6;
@@ -176,7 +175,7 @@ with col2:
         help="Send"
     )
 
-# --- Custom CSS for font, glassmorphism, sidebar, and input (merged and cleaned up from duplicates) ---
+# --- Custom CSS for font, glassmorphism, sidebar, and input ---
 st.markdown(
     """
     <style>
@@ -252,14 +251,6 @@ st.markdown(
         outline: none !important;
         border: none !important;
     }
-    .glass-card {
-        background: rgba(36,37,46,0.7) !important;
-        border-radius: 16px !important;
-        padding: 1.2em !important;
-        margin-bottom: 1.5em !important;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important;
-        border: 1px solid rgba(165, 180, 252, 0.1) !important;
-    }
     </style>
     """,
     unsafe_allow_html=True
@@ -306,17 +297,11 @@ if send_clicked and prompt_text.strip():
             st.stop()
 
         # --- STD Call ---
-        with st.spinner("Running complete SPAR pipeline (Code Generation → Testing → Debugging)..."):
-            full_pipeline_response = requests.post(
-                "http://localhost:8000/api/full-pipeline",
-                json={
-                    "user_prompt": original_prompt,
-                    "language": "python",
-                    "refined_prompt": refined_prompt,
-                    "signature": st.session_state["tua_output"].get("signature"),
-                    "edge_cases": st.session_state["tua_output"].get("edge_cases")
-                },
-                timeout=300  # 5 minutes timeout for full pipeline
+        with st.spinner("Running SubtaskDistributor (STD)..."):
+            std_response = requests.post(
+                "http://localhost:8000/api/std",
+                json={"structured_prompt": tua_result.get("structured_prompt", ""), "language": lang},
+                timeout=60
             )
         std_result = std_response.json()
 
@@ -330,7 +315,9 @@ if send_clicked and prompt_text.strip():
             classification = std_data.get("classification", "UNKNOWN")
             if classification == "SIMPLE":
                 st.success(f"**Classification: {classification}**")
-            elif classification == "COMPLEX":  # Updated to handle merged Medium/Complex as Complex
+            elif classification == "MEDIUM":
+                st.warning(f"**Classification: {classification}**")
+            elif classification == "COMPLEX":
                 st.error(f"**Classification: {classification}**")
             else:
                 st.info(f"**Classification: {classification}**")
@@ -384,7 +371,7 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
                 st.code(refined_prompt, language="text")
                 st.session_state["refined_prompt"] = refined_prompt
             else:
-                # Multiple subtasks for COMPLEX problems (note: currently focusing on simple, but handling for future)
+                # Multiple subtasks for COMPLEX problems
                 for item in refined_prompts:
                     subtask_label = item.get('subtask', 'Main Task') if item.get('subtask') else 'Main Task'
                     refined_prompt = item.get('refined_prompt', '')
@@ -392,7 +379,7 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
                     st.markdown(f"<b>{subtask_label}:</b>", unsafe_allow_html=True)
                     st.code(refined_prompt, language="text")
                     
-                    # Store the first refined prompt for the full pipeline (for simple case)
+                    # Store the first refined prompt for the full pipeline
                     if 'refined_prompt' not in st.session_state:
                         st.session_state["refined_prompt"] = refined_prompt
             
@@ -404,11 +391,9 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
     st.subheader("Full Pipeline Execution")
     
     try:
-        # Use the refined prompt if available, otherwise use original
+        # Use the refined prompt if available, otherwise use last_prompt
         refined_prompt = st.session_state.get("refined_prompt", "")
         original_prompt = st.session_state.get('last_prompt', prompt_text)
-        signature = st.session_state["tua_output"].get("signature", None)
-        edge_cases = st.session_state["tua_output"].get("edge_cases", None)
         
         # Use refined prompt for code generation if available
         pipeline_prompt = refined_prompt if refined_prompt else original_prompt
@@ -427,8 +412,8 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
                     "user_prompt": original_prompt,
                     "language": "python",
                     "refined_prompt": refined_prompt,
-                    "signature": signature,
-                    "edge_cases": edge_cases
+                    "signature": st.session_state["tua_output"].get("signature", "def solution(*args, **kwargs):"),
+                    "edge_cases": st.session_state["tua_output"].get("edge_cases", "Handle all relevant edge cases")
                 },
                 timeout=300  # 5 minutes timeout for full pipeline
             )
@@ -496,3 +481,47 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
     except Exception as e:
         st.error(f"Full pipeline execution error: {str(e)}")
         st.info("If this persists, please check the backend logs.")
+
+# CSS: Add glass-card, subtask-bubble, subtask-status for glassmorphic result cards and bubbles
+st.markdown(
+    """
+    <style>
+    .glass-card {
+        background: rgba(36,37,46,0.7);
+        backdrop-filter: blur(8px);
+        border-radius: 1.5em;
+        padding: 1.5em 1.7em;
+        margin-bottom: 2em;
+        box-shadow: 0 4px 32px 0 rgba(165,180,252,0.10);
+        border: 1.5px solid #232336;
+    }
+    .subtask-bubble {
+        display: inline-block;
+        background: linear-gradient(90deg,#232336,#35354a);
+        color: #b3b3c6;
+        font-weight: 600;
+        padding: 0.5em 1.1em;
+        border-radius: 1.5em;
+        font-size: 1.05em;
+        margin: 0.3em 0.5em 0.3em 0;
+        box-shadow: 0 2px 8px 0 rgba(165,180,252,0.07);
+    }
+    .subtask-status {
+        margin-left: 0.7em;
+        font-size: 0.95em;
+        font-weight: 700;
+        border-radius: 1em;
+        padding: 0.2em 0.8em;
+    }
+    .subtask-pending {
+        background: #fbbf24;
+        color: #232336;
+    }
+    .subtask-complete {
+        background: #22c55e;
+        color: #fff;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)

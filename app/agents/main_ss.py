@@ -1,4 +1,5 @@
 import time
+import re
 from typing import Optional, Dict, Any, List
 from .base_agent import SPARConfig, handle_errors
 from .code_agent import CodeAgent
