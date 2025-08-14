@@ -345,15 +345,13 @@ if send_clicked and prompt_text.strip():
         st.code(traceback.format_exc(), language="python")
     st.markdown('</div></div>', unsafe_allow_html=True)
 
-# --- PRA Integration: Trigger Only When TUA and STD Both Complete ---
+# --- PRA Integration ---
 if st.session_state.get("tua_output") and st.session_state.get("std_output"):
     st.subheader("Prompt Refiner Agent Output")
-
     pra_input = {
         "tua": st.session_state["tua_output"],
         "std": st.session_state["std_output"]
     }
-
     try:
         pra_response = requests.post("http://localhost:8000/api/pra", json=pra_input).json()
         st.session_state["pra_output"] = pra_response
@@ -362,24 +360,18 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
             st.markdown('<div class="glass-card">', unsafe_allow_html=True)
             st.markdown("<h4 style='margin-bottom:0.5em;'>Prompt Refiner Agent (PRA)</h4>", unsafe_allow_html=True)
             
-            # For SIMPLE problems, we should have only one refined prompt
             refined_prompts = pra_response["refined_prompts"]
             if len(refined_prompts) == 1 and refined_prompts[0].get('subtask') == 'Complete Solution':
-                # Single refined prompt for SIMPLE problem
                 refined_prompt = refined_prompts[0].get('refined_prompt', '')
                 st.markdown("<b>Complete Solution:</b>", unsafe_allow_html=True)
                 st.code(refined_prompt, language="text")
                 st.session_state["refined_prompt"] = refined_prompt
             else:
-                # Multiple subtasks for COMPLEX problems
                 for item in refined_prompts:
-                    subtask_label = item.get('subtask', 'Main Task') if item.get('subtask') else 'Main Task'
+                    subtask_label = item.get('subtask', 'Main Task')
                     refined_prompt = item.get('refined_prompt', '')
-                    
                     st.markdown(f"<b>{subtask_label}:</b>", unsafe_allow_html=True)
                     st.code(refined_prompt, language="text")
-                    
-                    # Store the first refined prompt for the full pipeline
                     if 'refined_prompt' not in st.session_state:
                         st.session_state["refined_prompt"] = refined_prompt
             
@@ -387,100 +379,103 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
     except Exception as e:
         st.error(f"PRA API failed: {str(e)}")
 
-    # --- Full Pipeline Execution After PRA ---
-    st.subheader("Full Pipeline Execution")
+# --- Full Pipeline Execution: Broken into Modular Glass Cards ---
+st.subheader("Code Generation & Testing Pipeline")
+
+try:
+    refined_prompt = st.session_state.get("refined_prompt", "")
+    original_prompt = st.session_state.get('last_prompt', prompt_text)
+    pipeline_prompt = refined_prompt if refined_prompt else original_prompt
     
-    try:
-        # Use the refined prompt if available, otherwise use last_prompt
-        refined_prompt = st.session_state.get("refined_prompt", "")
-        original_prompt = st.session_state.get('last_prompt', prompt_text)
+    if refined_prompt:
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown("<h4 style='margin-bottom:0.5em;'>Structured Prompt for Code Agent</h4>", unsafe_allow_html=True)
+        st.code(refined_prompt, language="text")
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with st.spinner("Running Code Generation → Testing → Debugging..."):
+        full_pipeline_response = requests.post(
+            "http://localhost:8000/api/full-pipeline",
+            json={
+                "user_prompt": original_prompt,
+                "language": "python",
+                "refined_prompt": refined_prompt,
+                "signature": st.session_state["tua_output"].get("signature", "def solution(*args, **kwargs):"),
+                "edge_cases": st.session_state["tua_output"].get("edge_cases", "Handle all relevant edge cases")
+            },
+            timeout=300
+        )
+    
+    if full_pipeline_response.status_code == 200:
+        pipeline_result = full_pipeline_response.json()
+        st.session_state["pipeline_result"] = pipeline_result
         
-        # Use refined prompt for code generation if available
-        pipeline_prompt = refined_prompt if refined_prompt else original_prompt
-        
-        # Display the structured prompt sent to code agent
-        if refined_prompt:
-            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-            st.markdown("<h4 style='margin-bottom:0.5em;'>Structured Prompt Sent to Code Agent</h4>", unsafe_allow_html=True)
-            st.code(refined_prompt, language="text")
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        with st.spinner("Running complete SPAR pipeline (Code Generation → Testing → Debugging)..."):
-            full_pipeline_response = requests.post(
-                "http://localhost:8000/api/full-pipeline",
-                json={
-                    "user_prompt": original_prompt,
-                    "language": "python",
-                    "refined_prompt": refined_prompt,
-                    "signature": st.session_state["tua_output"].get("signature", "def solution(*args, **kwargs):"),
-                    "edge_cases": st.session_state["tua_output"].get("edge_cases", "Handle all relevant edge cases")
-                },
-                timeout=300  # 5 minutes timeout for full pipeline
-            )
-        
-        if full_pipeline_response.status_code == 200:
-            pipeline_result = full_pipeline_response.json()
-            st.session_state["pipeline_result"] = pipeline_result
-            
-            # Display pipeline results in glass boxes
-            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-            st.markdown("<h4 style='margin-bottom:0.5em;'>Complete Pipeline Results</h4>", unsafe_allow_html=True)
-            
-            # Code Generation Results
-            st.markdown("**Generated Code:**")
-            code = pipeline_result.get("code", "")
-            if code:
-                st.code(code, language="python")
-            else:
-                st.warning("No code was generated")
-            
-            # Test Results
-            test_results = pipeline_result.get("test_results", {})
-            if test_results:
-                status = test_results.get("status", "unknown")
-                passed = test_results.get("passed", 0)
-                total = test_results.get("total", 0)
-                
-                st.markdown("**Test Results:**")
-                if status == "pass":
-                    st.success(f"Tests Passed: {passed}/{total}")
-                elif status == "fail":
-                    st.error(f"Tests Failed: {passed}/{total}")
-                    if "error" in test_results:
-                        st.error(f"Error: {test_results['error']}")
-                else:
-                    st.warning(f"Test Status: {status} ({passed}/{total})")
-                
-                # Show test cases if available
-                test_cases = test_results.get("test_cases", [])
-                if test_cases:
-                    st.markdown("**Test Cases:**")
-                    for i, test in enumerate(test_cases, 1):
-                        st.code(test, language="python")
-            
-            # Timing Information
-            code_time = pipeline_result.get("code_time", 0)
-            test_time = pipeline_result.get("test_time", 0)
-            total_time = pipeline_result.get("total_time", 0)
-            
-            st.markdown("**Timing Summary:**")
-            st.markdown(f"- Code Generation: {code_time:.2f}s")
-            st.markdown(f"- Testing/Debugging: {test_time:.2f}s")
-            st.markdown(f"- Total Time: {total_time:.2f}s")
-            
-            # Code Source Information
-            code_source = pipeline_result.get("code_source", "unknown")
-            st.markdown(f"**Code Source:** {code_source}")
-            
-            st.markdown('</div>', unsafe_allow_html=True)
-            
+        # Code Generation Box
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown("<h4 style='margin-bottom:0.5em;'>Code Generation</h4>", unsafe_allow_html=True)
+        code = pipeline_result.get("code", "")
+        if code:
+            st.code(code, language="python")
         else:
-            st.error("Full pipeline execution failed")
-            st.code(full_pipeline_response.text, language="text")
+            st.warning("No code generated")
+        code_source = pipeline_result.get("code_source", "unknown")
+        st.markdown(f"**Source:** {code_source}", unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Test Results Box
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown("<h4 style='margin-bottom:0.5em;'>Test Generation & Results</h4>", unsafe_allow_html=True)
+        test_results = pipeline_result.get("test_results", {})
+        if test_results:
+            status = test_results.get("status", "unknown")
+            passed = test_results.get("passed", 0)
+            total = test_results.get("total", 0)
+            if status == "pass":
+                st.success(f"Tests Passed: {passed}/{total}")
+            elif status == "fail":
+                st.error(f"Tests Failed: {passed}/{total}")
+                if "error" in test_results:
+                    st.error(f"Error: {test_results['error']}")
+            else:
+                st.warning(f"Test Status: {status} ({passed}/{total})")
             
-    except Exception as e:
-        st.error(f"Full pipeline execution error: {str(e)}")
-        st.info("If this persists, please check the backend logs.")
+            test_cases = test_results.get("test_cases", [])
+            if test_cases:
+                st.markdown("**Test Cases:**")
+                for i, test in enumerate(test_cases, 1):
+                    st.code(test, language="python")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Self-Debug Box (only if tests failed and debug was triggered)
+        if test_results.get("status") == "fail" and "debug_result" in pipeline_result:
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+            st.markdown("<h4 style='margin-bottom:0.5em;'>Self-Debug Agent</h4>", unsafe_allow_html=True)
+            debug_result = pipeline_result["debug_result"]
+            st.markdown(f"**Explanation:** {debug_result.get('debug_explanation', 'No explanation')}", unsafe_allow_html=True)
+            fixed_code = debug_result.get('fixed_code', '')
+            if fixed_code:
+                st.markdown("**Fixed Code:**")
+                st.code(fixed_code, language="python")
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Timing Summary Box
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown("<h4 style='margin-bottom:0.5em;'>Timing Summary</h4>", unsafe_allow_html=True)
+        code_time = pipeline_result.get("code_time", 0)
+        test_time = pipeline_result.get("test_time", 0)
+        total_time = pipeline_result.get("total_time", 0)
+        st.markdown(f"- Code Generation: {code_time:.2f}s")
+        st.markdown(f"- Testing/Debugging: {test_time:.2f}s")
+        st.markdown(f"- Total Time: {total_time:.2f}s")
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    else:
+        st.error("Pipeline failed")
+        st.code(full_pipeline_response.text, language="text")
+
+except Exception as e:
+    st.error(f"Pipeline error: {str(e)}")
+    st.info("Check backend logs.")
 
 # CSS: Add glass-card, subtask-bubble, subtask-status for glassmorphic result cards and bubbles
 st.markdown(
