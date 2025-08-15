@@ -49,8 +49,10 @@ Constraints: {constraints or "Follow performance and correctness requirements"}
 Requirements:
 - Generate 5 different test assertions
 - Use the format: assert {function_name}(input) == expected_output or assert_raises(Exception, {function_name}, input)
-- Cover both normal and edge cases
-- Ensure all test cases are valid Python assertions
+- Cover both normal and edge cases in a real-world manner
+- Generate realistic and practical test cases with reasonable input sizes. Avoid extremely large numbers or impractical inputs unless the problem requires it.
+- For exception tests, use assert_raises(ExceptionType, function_name, input) without adding '== True' or any comparison
+- Ensure all test cases are valid Python assertions and consistent
 - Return only the assert statements, one per line
 
 Test cases:"""
@@ -111,6 +113,10 @@ Test cases:"""
         if assert_match:
             line = assert_match.group().strip()
 
+        # Remove '== True' from assert_raises lines
+        if 'assert_raises' in line:
+            line = re.sub(r'\s*==\s*True\s*$', '', line)
+
         if line.count('"') % 2 != 0:
             line += '"'
         elif line.count("'") % 2 != 0:
@@ -132,64 +138,65 @@ Test cases:"""
 
     @handle_errors
     def run_tests(self, code: str, test_cases: List[str]) -> Dict[str, Any]:
-        """Run test cases against the code"""
+        """Run test cases against the code, individually for detailed results"""
         if not test_cases:
-            return {"status": "error", "error": "No test cases generated", "passed": 0, "total": 0}
+            return {"status": "error", "error": "No test cases generated", "passed": 0, "total": 0, "detailed_test_results": []}
 
         valid_tests = [test for test in test_cases if self._is_valid_syntax(test)]
         if not valid_tests:
-            return {"status": "error", "error": "No valid test cases", "passed": 0, "total": 0}
+            return {"status": "error", "error": "No valid test cases", "passed": 0, "total": 0, "detailed_test_results": []}
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-            f.write("from unittest import TestCase\n")
-            f.write(f"{code}\n\n")
-            f.write("# Test cases\n")
-            for test_case in valid_tests:
-                if 'raises' in test_case:
-                    f.write(f"try:\n    {test_case.split('raises')[0].strip()}()\nexcept Exception as e:\n    assert isinstance(e, {test_case.split('raises')[1].strip()}), f'Expected {test_case.split('raises')[1].strip()} but got {{type(e).__name__}}'\n")
+        detailed_results = []
+        passed = 0
+        total = len(valid_tests)
+
+        for test_case in valid_tests:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                f.write(code + "\n\n")
+                if 'assert_raises' in test_case:
+                    match = re.search(r'assert_raises\((.+?),\s*(.+?),\s*(.+?)\)', test_case)
+                    if match:
+                        exception = match.group(1).strip()
+                        func = match.group(2).strip()
+                        args = match.group(3).strip()
+                        f.write(f"try:\n    {func}({args})\nexcept {exception} as e:\n    print('PASS')\nelse:\n    print('FAIL: No exception raised')\n")
+                    else:
+                        f.write(f"print('FAIL: Invalid assert_raises format')\n")
                 else:
-                    f.write(f"{test_case}\n")
-            f.write("\nprint('All tests passed!')\n")
-            temp_file = f.name
+                    f.write(f"try:\n    {test_case}\n    print('PASS')\nexcept Exception as e:\n    print(f'FAIL: {{e}}')\n")
+                temp_file = f.name
 
-        try:
-            result = subprocess.run(
-                ['python', temp_file],
-                capture_output=True,
-                text=True,
-                timeout=self.config.test_timeout
-            )
+            try:
+                result = subprocess.run(
+                    ['python', temp_file],
+                    capture_output=True,
+                    text=True,
+                    timeout=self.config.test_timeout
+                )
+                output = result.stdout.strip()
+                if 'PASS' in output:
+                    detailed_results.append({"test": test_case, "status": "pass"})
+                    passed += 1
+                else:
+                    error_msg = output.replace('FAIL: ', '') if 'FAIL' in output else result.stderr
+                    detailed_results.append({"test": test_case, "status": "fail", "error": error_msg})
+            except subprocess.TimeoutExpired:
+                detailed_results.append({"test": test_case, "status": "fail", "error": "Timeout"})
+            finally:
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
 
-            if result.returncode == 0:
-                return {
-                    "status": "pass",
-                    "passed": len(valid_tests),
-                    "total": len(valid_tests),
-                    "test_cases": valid_tests
-                }
-            else:
-                failed_test = self._identify_failed_test(code, result.stderr, test_cases)
-                passed_count = self._count_passed_tests(code, valid_tests)
-                return {
-                    "status": "fail",
-                    "error": result.stderr,
-                    "passed": passed_count,
-                    "total": len(valid_tests),
-                    "failed_test": failed_test,
-                    "test_cases": valid_tests
-                }
+        status = "pass" if passed == total else "fail"
+        overall_error = "All tests passed" if status == "pass" else "Some tests failed"
 
-        except subprocess.TimeoutExpired:
-            return {
-                "status": "timeout",
-                "error": "Test execution timed out",
-                "passed": 0,
-                "total": len(valid_tests),
-                "test_cases": valid_tests
-            }
-        finally:
-            if os.path.exists(temp_file):
-                os.unlink(temp_file)
+        return {
+            "status": status,
+            "passed": passed,
+            "total": total,
+            "error": overall_error,
+            "test_cases": valid_tests,
+            "detailed_test_results": detailed_results
+        }
 
     def _is_valid_syntax(self, test: str) -> bool:
         """Check if test has valid syntax"""
@@ -198,45 +205,3 @@ Test cases:"""
             return True
         except SyntaxError:
             return False
-
-    def _identify_failed_test(self, code: str, error: str, test_cases: List[str]) -> str:
-        """Extract the specific test that failed from error output"""
-        for test in test_cases:
-            if test.split('(')[0] in error:
-                return test
-        return test_cases[0]
-
-    def _count_passed_tests(self, code: str, test_cases: List[str]) -> int:
-        """Count how many individual tests pass"""
-        passed = 0
-        for test_case in test_cases:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-                f.write("from unittest import TestCase\n")
-                f.write(f"{code}\n\n")
-                f.write(f"try:\n")
-                if 'raises' in test_case:
-                    f.write(f"    {test_case.split('raises')[0].strip()}()\n")
-                    f.write(f"except Exception as e:\n")
-                    f.write(f"    print('PASS' if isinstance(e, {test_case.split('raises')[1].strip()}) else f'FAIL: {{e}}')\n")
-                else:
-                    f.write(f"    {test_case}\n")
-                    f.write(f"    print('PASS')\n")
-                f.write(f"except Exception as e:\n")
-                f.write(f"    print(f'FAIL: {{e}}')\n")
-                temp_file = f.name
-
-            try:
-                result = subprocess.run(
-                    ['python', temp_file],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                if result.returncode == 0 and 'PASS' in result.stdout:
-                    passed += 1
-            except subprocess.TimeoutExpired:
-                pass
-            finally:
-                if os.path.exists(temp_file):
-                    os.unlink(temp_file)
-        return passed

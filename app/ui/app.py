@@ -1,4 +1,4 @@
-# Full updated app.py with fixes
+# Full updated app.py with fixes and improvements
 import sys
 import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -11,11 +11,12 @@ from app.modules import input_handler
 import traceback
 import requests
 import re  # For parsing subtasks if needed
+import time  # For timing
 
 # Page configuration
 st.set_page_config(
     page_title="spar.ai DSA LLM Assistant",
-    layout="centered",
+    layout="wide",  # Wider for fluid feel
     initial_sidebar_state="auto"
 )
 
@@ -53,11 +54,106 @@ with st.sidebar:
         st.markdown('<span style="color:#aaaaaa;">No history yet.</span>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- Main area title and subtitle ---
-st.markdown('<div style="text-align:center;margin-top:2em;margin-bottom:0.5em;font-weight:800;font-size:3em;letter-spacing:0.01em;">SPAR</div>', unsafe_allow_html=True)
-st.markdown('<div style="text-align:center;margin-bottom:2.5em;font-weight:400;font-size:1.2em;color:#aaaaaa;">spar.ai: Agentic Code Reasoning Assistant</div>', unsafe_allow_html=True)
+# --- Custom Typography and Prompt Box with Integrated Send Button ---
+# Using advanced HTML/CSS/JS for KIMI-like UI, Streamlit-compatible via st.components.v1.html
+st.components.v1.html("""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap'); /* Bold typography font */
+    .kimi-title {
+      text-align: center;
+      margin-top: 1em;
+      margin-bottom: 0.5em;
+      font-family: 'Inter', sans-serif;
+      font-weight: 900;
+      font-size: 6em;
+      letter-spacing: -0.05em;
+      color: #ffffff;
+      text-shadow: 0 0 20px rgba(255, 255, 255, 0.5), 0 0 40px rgba(29, 155, 240, 0.3); /* Glowing effect */
+      animation: glow-pulse 2s ease-in-out infinite alternate;
+    }
+    @keyframes glow-pulse {
+      from { text-shadow: 0 0 10px rgba(255, 255, 255, 0.3), 0 0 20px rgba(29, 155, 240, 0.2); }
+      to { text-shadow: 0 0 30px rgba(255, 255, 255, 0.7), 0 0 60px rgba(29, 155, 240, 0.5); }
+    }
+    .kimi-subtitle {
+      text-align: center;
+      margin-bottom: 1.5em;
+      font-weight: 400;
+      font-size: 1.2em;
+      color: #aaaaaa;
+    }
+    .kimi-prompt-container {
+      position: relative;
+      max-width: 800px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: center;
+    }
+    .kimi-prompt {
+      background: rgba(10,10,10,0.8);
+      color: #ffffff;
+      border-radius: 30px;
+      font-size: 1.2em;
+      box-shadow: 0 4px 16px rgba(29,155,240,0.1), inset 0 0 10px rgba(29,155,240,0.2); /* Inner glow */
+      border: 1px solid rgba(29,155,240,0.3);
+      padding: 1.2em 3em 1.2em 1.5em;
+      width: 100%;
+      min-height: 68px;
+      resize: vertical;
+      transition: all 0.3s ease, box-shadow 0.5s ease;
+    }
+    .kimi-prompt:focus {
+      border-color: #1d9bf0;
+      box-shadow: 0 4px 16px rgba(29,155,240,0.2), inset 0 0 15px rgba(29,155,240,0.4); /* Enhanced glow on focus */
+      outline: none;
+    }
+    .kimi-send-btn {
+      position: absolute;
+      right: 1em;
+      top: 50%;
+      transform: translateY(-50%);
+      background: linear-gradient(135deg, #1d9bf0, #0a84ff);
+      color: #ffffff;
+      border-radius: 50%;
+      font-weight: 700;
+      font-size: 1.2em;
+      border: none;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 16px rgba(29,155,240,0.3);
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+    .kimi-send-btn:hover {
+      box-shadow: 0 6px 24px rgba(29,155,240,0.4);
+      transform: translateY(-52%);
+    }
+  </style>
+  <script>
+    function sendPrompt() {
+      // JS to simulate send, but in Streamlit, we'll handle via button click
+      document.getElementById('kimi-prompt').value = '';
+    }
+  </script>
+</head>
+<body>
+  <div class="kimi-title">spar.ai</div>
+  <div class="kimi-prompt-container">
+    <textarea id="kimi-prompt" class="kimi-prompt" placeholder="Ask Anything..."></textarea>
+    <button class="kimi-send-btn" onclick="sendPrompt()">↑</button>
+  </div>
+</body>
+</html>
+""", height=300, scrolling=False)  # Height adjusted for title and prompt box
 
-# --- Prompt input row ---
+# Note: Since Streamlit doesn't support direct JS interaction for button clicks in HTML, we'll keep the original prompt_text and send_clicked for functionality
 col1, col2 = st.columns([8,1], gap="small")
 with col1:
     prompt_text = st.text_area(
@@ -79,22 +175,23 @@ with col2:
         args={"aria-label": "Submit DSA problem"}
     )
 
-# --- Custom CSS for Grok-like design: Dark, minimalist, blue accents, clean cards ---
+# --- Enhanced CSS with more glowing effects and agent boxes ---
 st.markdown(
     """
     <style>
     html, body, .stApp {
-        background: #000000 !important;
+        background: linear-gradient(to bottom, #000000, #0a0a0a) !important;
         color: #ffffff !important;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
     }
     .stSidebar {
-        background: #0a0a0a !important;
-        border-radius: 0 18px 18px 0;
-        box-shadow: 0 4px 32px 0 rgba(29, 155, 240, 0.1);
+        background: rgba(10,10,10,0.8) !important;
+        backdrop-filter: blur(10px);
+        border-radius: 0 20px 20px 0;
+        box-shadow: 0 4px 32px rgba(29,155,240,0.15);
     }
     .sidebar-title {
-        font-size: 1.3em;
+        font-size: 1.4em;
         font-weight: 700;
         color: #ffffff;
         margin-bottom: 0.5em;
@@ -102,80 +199,59 @@ st.markdown(
         letter-spacing: 0.01em;
     }
     .sidebar-history {
-        margin-top: 2em;
+        margin-top: 1em;
         max-height: 60vh;
         overflow-y: auto;
         padding-right: 0.5em;
     }
     .sidebar-history-entry {
-        background: #0a0a0a;
-        border-radius: 8px;
-        margin-bottom: 0.5em;
-        padding: 0.7em 1em;
+        background: rgba(26,26,26,0.7);
+        border-radius: 12px;
+        margin-bottom: 0.8em;
+        padding: 0.8em 1.2em;
         font-size: 1em;
-        color: #aaaaaa;
-        transition: background 0.2s;
+        color: #dddddd;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 8px rgba(29,155,240,0.05);
     }
     .sidebar-history-entry:hover {
-        background: #1a1a1a;
-    }
-    .stTextArea textarea {
-        background: #0a0a0a !important;
-        color: #ffffff !important;
-        border-radius: 18px !important;
-        font-size: 1.2em !important;
-        box-shadow: 0 2px 12px 0 rgba(29, 155, 240, 0.1);
-        border: 1px solid #1d9bf0 !important;
-        padding: 1.2em 1.5em !important;
-    }
-    .stButton>button {
-        background: #1d9bf0;
-        color: #ffffff;
-        border-radius: 18px;
-        font-weight: 700;
-        font-size: 1.3em;
-        border: none;
-        padding: 0.7em 1.2em;
-        margin-top: 0.5em;
-        margin-bottom: 0.5em;
-        box-shadow: 0 2px 12px 0 rgba(29, 155, 240, 0.2);
-        transition: box-shadow 0.2s;
-        outline: none !important;
-    }
-    .stButton>button:hover {
-        box-shadow: 0 4px 24px 0 rgba(29, 155, 240, 0.3);
-        background: #0a84ff;
+        background: rgba(26,26,26,0.9);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(29,155,240,0.2);
     }
     .glass-card {
-        background: #0a0a0a;
+        background: rgba(10,10,10,0.6) !important;
+        backdrop-filter: blur(15px);
         border-radius: 1.5em;
-        padding: 1.5em;
+        padding: 1.8em;
         margin-bottom: 2em;
-        box-shadow: 0 4px 32px 0 rgba(29, 155, 240, 0.1);
-        border: 1px solid rgba(29, 155, 240, 0.2);
-        transition: all 0.3s ease;
+        box-shadow: 0 0 20px rgba(29,155,240,0.3), inset 0 0 10px rgba(29,155,240,0.1); /* Enhanced glow */
+        border: 1px solid rgba(29,155,240,0.4);
+        transition: all 0.3s ease, box-shadow 0.5s ease;
     }
     .glass-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 40px 0 rgba(29, 155, 240, 0.15);
+        transform: translateY(-4px);
+        box-shadow: 0 0 40px rgba(29,155,240,0.5), inset 0 0 20px rgba(29,155,240,0.2); /* Stronger glow on hover */
     }
     .subtask-box {
-        background: #1a1a1a;
+        background: rgba(26,26,26,0.7);
         border-radius: 12px;
-        padding: 1em;
+        padding: 1.2em;
         margin-bottom: 1em;
-        box-shadow: 0 2px 8px 0 rgba(29, 155, 240, 0.05);
-        border: 1px solid rgba(29, 155, 240, 0.1);
+        box-shadow: 0 2px 8px rgba(29,155,240,0.05);
+        border: 1px solid rgba(29,155,240,0.1);
+        transition: all 0.3s ease;
     }
     .subtask-status {
-        margin-left: 0.7em;
-        font-size: 0.95em;
+        margin-left: 0.8em;
+        font-size: 1em;
         font-weight: 700;
-        border-radius: 1em;
-        padding: 0.2em 0.8em;
+        border-radius: 1.2em;
+        padding: 0.3em 1em;
+        transition: all 0.3s ease;
     }
     .subtask-complete {
-        background: #1d9bf0;
+        background: linear-gradient(135deg, #1d9bf0, #0a84ff);
         color: #ffffff;
     }
     .subtask-pending {
@@ -185,6 +261,33 @@ st.markdown(
     .subtask-failed {
         background: #ef4444;
         color: #ffffff;
+    }
+    .test-bubble {
+        background: rgba(26,26,26,0.7);
+        border-radius: 16px;
+        padding: 1em;
+        margin-bottom: 1em;
+        display: flex;
+        align-items: center;
+        box-shadow: 0 2px 8px rgba(29,155,240,0.05);
+        border: 1px solid rgba(29,155,240,0.1);
+        transition: all 0.3s ease;
+    }
+    .test-bubble:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(29,155,240,0.15);
+    }
+    .test-pass {
+        background: rgba(0,200,0,0.1);
+        border-color: #00c800;
+    }
+    .test-fail {
+        background: rgba(255,0,0,0.1);
+        border-color: #ff0000;
+    }
+    .test-icon {
+        font-size: 1.5em;
+        margin-right: 1em;
     }
     </style>
     """,
@@ -202,18 +305,22 @@ if send_clicked and prompt_text.strip():
     st.session_state.pra_output = None
     st.session_state.pipeline_result = None
 
-    st.markdown('<div style="display:flex;justify-content:center;width:100%;"><div style="max-width:650px;width:100%;margin:0 auto;">', unsafe_allow_html=True)
+    st.markdown('<div style="display:flex;justify-content:center;width:100%;"><div style="max-width:800px;width:100%;margin:0 auto;">', unsafe_allow_html=True)
     
     try:
         lang = "python"
 
+        overall_start = time.time()
+
         # --- TUA Call ---
         with st.spinner("Running Task Understanding Agent (TUA)..."):
+            tua_start = time.time()
             tua_response = requests.post(
                 "http://localhost:8000/api/tua",
                 json={"user_prompt": cleaned_prompt, "language": lang},
                 timeout=60
             )
+            tua_time = time.time() - tua_start
         if tua_response.status_code == 200:
             tua_result = tua_response.json()
             st.session_state.tua_output = tua_result
@@ -237,11 +344,13 @@ if send_clicked and prompt_text.strip():
 
         # --- STD Call ---
         with st.spinner("Running Subtask Distributor (STD)..."):
+            std_start = time.time()
             std_response = requests.post(
                 "http://localhost:8000/api/std",
                 json={"structured_prompt": tua_result.get("structured_prompt", ""), "language": lang},
                 timeout=60
             )
+            std_time = time.time() - std_start
         if std_response.status_code == 200:
             std_result = std_response.json()
             std_data = std_result.get('std_result', std_result)  # Fix: Handle nested or direct dict
@@ -251,8 +360,6 @@ if send_clicked and prompt_text.strip():
             classification = std_data.get("classification", "UNKNOWN")
             if classification == "SIMPLE":
                 st.success(f"**Classification: {classification}**")
-            elif classification == "MEDIUM":
-                st.warning(f"**Classification: {classification}**")
             elif classification == "COMPLEX":
                 st.error(f"**Classification: {classification}**")
             else:
@@ -268,7 +375,7 @@ if send_clicked and prompt_text.strip():
                 if subtasks_match:
                     subtasks_text = subtasks_match.group(1).strip().split('\n')
                     subtasks = [{'step': i+1, 'description': s.strip('* ').strip()} for i, s in enumerate(subtasks_text) if s.strip()]
-            if subtasks:
+            if subtasks and classification != "SIMPLE":  # Only show subtasks for non-simple
                 st.markdown("**Subtasks:**")
                 for subtask in subtasks:
                     st.markdown(
@@ -283,28 +390,15 @@ if send_clicked and prompt_text.strip():
             st.markdown('</div>', unsafe_allow_html=True)
             st.stop()
 
-    except Exception as e:
-        st.error(f"Error in TUA/STD execution: {str(e)}")
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.markdown("<h4 style='margin-bottom:0.5em;'>Pipeline Error <span class='subtask-status subtask-failed'>Failed</span></h4>", unsafe_allow_html=True)
-        st.code(traceback.format_exc(), language="python")
-        st.markdown('</div>', unsafe_allow_html=True)
-        st.stop()
-    st.markdown('</div></div>', unsafe_allow_html=True)
-
-# --- PRA and Full Pipeline Execution ---
-if st.session_state.get("tua_output") and st.session_state.get("std_output"):
-    st.subheader("Code Generation & Testing Pipeline")
-    st.markdown('<div style="display:flex;justify-content:center;width:100%;"><div style="max-width:650px;width:100%;margin:0 auto;">', unsafe_allow_html=True)
-    
-    try:
         # --- PRA Call ---
         with st.spinner("Running Prompt Refiner Agent (PRA)..."):
+            pra_start = time.time()
             pra_input = {
                 "tua": st.session_state["tua_output"],
                 "std": st.session_state["std_output"]
             }
             pra_response = requests.post("http://localhost:8000/api/pra", json=pra_input, timeout=60)
+            pra_time = time.time() - pra_start
             if pra_response.status_code == 200:
                 pra_result = pra_response.json()
                 st.session_state.pra_output = pra_result
@@ -313,20 +407,13 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
                 refined_prompts = pra_result.get("refined_prompts", [])
                 if refined_prompts:
                     if len(refined_prompts) == 1 and refined_prompts[0].get('subtask') == 'Complete Solution':
-                        refined_prompt = refined_prompts[0].get('refined_prompt', '')
-                        st.markdown("<b>Complete Solution:</b>", unsafe_allow_html=True)
-                        with st.expander("Refined Prompt"):
-                            st.code(refined_prompt, language="text")
-                        st.session_state["refined_prompt"] = refined_prompt
+                        st.markdown("<b>Complete Solution Refined:</b>", unsafe_allow_html=True)
+                        st.code(refined_prompts[0].get('refined_prompt', ''), language="text")  # Display refined prompt
                     else:
                         for item in refined_prompts:
                             subtask_label = item.get('subtask', 'Main Task')
-                            refined_prompt = item.get('refined_prompt', '')
                             st.markdown(f"<b>{subtask_label}:</b>", unsafe_allow_html=True)
-                            with st.expander(f"Refined Prompt for {subtask_label}"):
-                                st.code(refined_prompt, language="text")
-                            if 'refined_prompt' not in st.session_state:
-                                st.session_state["refined_prompt"] = refined_prompt
+                            st.code(item.get('refined_prompt', ''), language="text")  # Display refined prompt for each subtask
                 else:
                     st.warning("No refined prompts generated by PRA.")
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -337,7 +424,7 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
                 st.markdown('</div>', unsafe_allow_html=True)
                 st.stop()
 
-        # --- Full Pipeline Execution ---
+        # --- Full Pipeline Execution (Code Agent, Tester, Debugger) ---
         refined_prompt = st.session_state.get("refined_prompt", "")
         original_prompt = st.session_state.get('last_prompt', prompt_text)
         pipeline_prompt = refined_prompt if refined_prompt else original_prompt
@@ -349,7 +436,8 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
             st.markdown('</div>', unsafe_allow_html=True)
             st.stop()
 
-        with st.spinner("Running Code Generation → Testing → Debugging..."):
+        with st.spinner("Running Code Agent → Tester Agent → SelfDebugger (if needed)..."):
+            pipeline_start = time.time()
             full_pipeline_response = requests.post(
                 "http://localhost:8000/api/full-pipeline",
                 json={
@@ -361,26 +449,24 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
                 },
                 timeout=300
             )
+            pipeline_time = time.time() - pipeline_start
 
         if full_pipeline_response.status_code == 200:
             pipeline_result = full_pipeline_response.json()
             st.session_state.pipeline_result = pipeline_result
 
-            # Structured Prompt Box
-            if refined_prompt:
-                st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-                st.markdown("<h4 style='margin-bottom:0.5em;'>Structured Prompt for Code Agent <span class='subtask-status subtask-complete'>Completed</span></h4>", unsafe_allow_html=True)
-                with st.expander("Prompt Details"):
-                    st.code(refined_prompt, language="text")
-                st.markdown('</div>', unsafe_allow_html=True)
-
-            # Code Generation Box
+            # Code Agent Card
             st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-            st.markdown("<h4 style='margin-bottom:0.5em;'>Code Generation <span class='subtask-status subtask-complete'>Completed</span></h4>", unsafe_allow_html=True)
+            st.markdown("<h4 style='margin-bottom:0.5em;'>Code Agent <span class='subtask-status subtask-complete'>Completed</span></h4>", unsafe_allow_html=True)
             code = pipeline_result.get("code", "")
             if code:
                 with st.expander("Generated Code"):
                     st.code(code, language="python")
+                if "sub_codes" in pipeline_result:
+                    with st.expander("Subtask Codes (for Complex Tasks)"):
+                        for i, sub_code in enumerate(pipeline_result["sub_codes"]):
+                            st.markdown(f"**Subtask {i+1}:**")
+                            st.code(sub_code, language="python")
             else:
                 st.warning("No code generated")
             code_source = pipeline_result.get("code_source", "unknown")
@@ -389,84 +475,67 @@ if st.session_state.get("tua_output") and st.session_state.get("std_output"):
                 st.download_button("Download Code", code, file_name="solution.py")
             st.markdown('</div>', unsafe_allow_html=True)
 
-            # Test Results Box
+            # Tester Agent Card
             st.markdown('<div class="glass-card">', unsafe_allow_html=True)
             test_results = pipeline_result.get("test_results", {})
             status = test_results.get("status", "unknown")
             status_class = 'subtask-complete' if status == 'pass' else 'subtask-failed'
             status_text = 'Passed' if status == 'pass' else 'Failed'
-            st.markdown(f"<h4 style='margin-bottom:0.5em;'>Test Generation & Results <span class='subtask-status {status_class}'>{status_text}</span></h4>", unsafe_allow_html=True)
+            st.markdown(f"<h4 style='margin-bottom:0.5em;'>Tester Agent <span class='subtask-status {status_class}'>{status_text}</span></h4>", unsafe_allow_html=True)
             if test_results:
                 passed = test_results.get("passed", 0)
                 total = test_results.get("total", 0)
                 if status == "pass":
                     st.success(f"Tests Passed: {passed}/{total}")
                 elif status == "fail":
-                    st.error(f"Tests Failed: {passed}/{total}")
+                    st.error(f"Tests Passed: {passed}/{total}")
                     if "error" in test_results:
-                        st.error(f"Error: {test_results['error']}")
+                        st.error(f"Overall Error: {test_results['error']}")
                 else:
                     st.warning(f"Test Status: {status} ({passed}/{total})")
-                test_cases = test_results.get("test_cases", [])
-                if test_cases:
-                    with st.expander("Test Cases"):
-                        for i, test in enumerate(test_cases, 1):
-                            st.code(test, language="python")
-                if st.button("Export Test Cases", key="export_tests"):
-                    test_content = "\n".join(test_cases)
-                    st.download_button("Download Tests", test_content, file_name="tests.py")
-            else:
-                st.warning("No test results available")
+                detailed_results = test_results.get("detailed_test_results", [])
+                if detailed_results:
+                    st.markdown("**Test Cases:**")
+                    for res in detailed_results:
+                        test_class = "test-pass" if res["status"] == "pass" else "test-fail"
+                        icon = "✅" if res["status"] == "pass" else "❌"
+                        error_text = res.get('error', '').replace('\\', '\\\\') if 'error' in res else ''
+                        error_html = f"<br><span style=\"color:#ff0000;\">Error: {error_text}</span>" if 'error' in res else ""
+                        st.markdown(f'<div class="test-bubble {test_class}">'
+                                    f'<span class="test-icon">{icon}</span>'
+                                    f'<code>{res["test"]}</code>'
+                                    f'{error_html}'
+                                    f'</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
-            # Self-Debug Box
-            if test_results.get("status") == "fail" and "debug_result" in pipeline_result:
+            # SelfDebugger Card (if debugged)
+            if "debug_explanation" in pipeline_result:
                 st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-                st.markdown("<h4 style='margin-bottom:0.5em;'>Self-Debug Agent <span class='subtask-status subtask-complete'>Completed</span></h4>", unsafe_allow_html=True)
-                debug_result = pipeline_result["debug_result"]
-                st.markdown(f"**Explanation:** {debug_result.get('debug_explanation', 'No explanation provided')}", unsafe_allow_html=True)
-                fixed_code = debug_result.get('fixed_code', '')
-                if fixed_code:
-                    with st.expander("Fixed Code"):
-                        st.code(fixed_code, language="python")
-                    if st.button("Export Fixed Code", key="export_fixed_code"):
-                        st.download_button("Download Fixed Code", fixed_code, file_name="fixed_solution.py")
+                st.markdown("<h4 style='margin-bottom:0.5em;'>SelfDebugger Agent <span class='subtask-status subtask-complete'>Completed</span></h4>", unsafe_allow_html=True)
+                safe_explanation = pipeline_result['debug_explanation'].replace('\\', '\\\\') if 'debug_explanation' in pipeline_result else ""
+                st.markdown(f"<b>Explanation:</b> {safe_explanation}", unsafe_allow_html=True)
+                with st.expander("Fixed Code"):
+                    st.code(pipeline_result["code"], language="python")
                 st.markdown('</div>', unsafe_allow_html=True)
 
-            # Timing Summary Box
+            # Timing Summary
+            total_time = time.time() - overall_start
             st.markdown('<div class="glass-card">', unsafe_allow_html=True)
             st.markdown("<h4 style='margin-bottom:0.5em;'>Timing Summary <span class='subtask-status subtask-complete'>Completed</span></h4>", unsafe_allow_html=True)
-            code_time = pipeline_result.get("code_time", 0)
-            test_time = pipeline_result.get("test_time", 0)
-            total_time = pipeline_result.get("total_time", 0)
-            st.markdown(f"- Code Generation: {code_time:.2f}s")
-            st.markdown(f"- Testing/Debugging: {test_time:.2f}s")
+            st.markdown(f"- TUA: {tua_time:.2f}s")
+            st.markdown(f"- STD: {std_time:.2f}s")
+            st.markdown(f"- PRA: {pra_time:.2f}s")
+            st.markdown(f"- Pipeline (Code/Test/Debug): {pipeline_time:.2f}s")
             st.markdown(f"- Total Time: {total_time:.2f}s")
             st.markdown('</div>', unsafe_allow_html=True)
 
         else:
-            st.error(f"Full pipeline failed with status {full_pipeline_response.status_code}: {full_pipeline_response.text}")
-            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-            st.markdown("<h4 style='margin-bottom:0.5em;'>Pipeline Error <span class='subtask-status subtask-failed'>Failed</span></h4>", unsafe_allow_html=True)
-            st.code(full_pipeline_response.text, language="text")
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.error(f"Pipeline API failed with status {full_pipeline_response.status_code}: {full_pipeline_response.text}")
 
     except Exception as e:
-        st.error(f"Pipeline error: {str(e)}")
+        st.error(f"Error in execution: {str(e)}")
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.markdown("<h4 style='margin-bottom:0.5em;'>Pipeline Error <span class='subtask-status subtask-failed'>Failed</span></h4>", unsafe_allow_html=True)
         st.code(traceback.format_exc(), language="python")
         st.markdown('</div>', unsafe_allow_html=True)
-
     st.markdown('</div></div>', unsafe_allow_html=True)
-else:
-    if send_clicked and prompt_text.strip():
-        st.warning("TUA or STD output missing. Please ensure the prompt is processed successfully.")
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.markdown("<h4 style='margin-bottom:0.5em;'>Pipeline Error <span class='subtask-status subtask-pending'>Pending</span></h4>", unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-    elif send_clicked:
-        st.warning("Please enter a valid DSA problem prompt.")
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.markdown("<h4 style='margin-bottom:0.5em;'>Input Error <span class='subtask-status subtask-pending'>Pending</span></h4>", unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
