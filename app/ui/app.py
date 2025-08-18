@@ -709,7 +709,7 @@ if submitted and user_input.strip():
             st.error("No valid prompt available for pipeline execution.")
             st.stop()
         
-        with st.spinner("Running Code Agent → Tester Agent → SelfDebugger (if needed)..."):
+        with st.spinner("Running Full Pipeline (Code Generation, Testing, Debugging)..."):
             pipeline_start = time.time()
             try:
                 full_pipeline_response = requests.post(
@@ -764,14 +764,15 @@ if submitted and user_input.strip():
                     st.markdown(f"<h4 style='margin-bottom:0.5em;'>Tester Agent <span class='subtask-status {status_class}'>{status_text}</span></h4>", unsafe_allow_html=True)
                     
                     if test_results:
+                        attempts = test_results.get("attempts", 1)
                         passed = test_results.get("passed", 0)
                         total = test_results.get("total", 0)
                         if status == "pass":
-                            st.success(f"Tests Passed: {passed}/{total}")
+                            st.success(f"Tests Passed: {passed}/{total} after {attempts} attempt(s)")
                         elif status == "fail":
-                            st.error(f"Tests Passed: {passed}/{total}")
+                            st.error(f"Tests Passed: {passed}/{total} after {attempts} attempt(s)")
                         else:
-                            st.warning(f"Test Status: {status} ({passed}/{total})")
+                            st.warning(f"Test Status: {status} ({passed}/{total}) after {attempts} attempt(s)")
                         
                         if "error" in test_results:
                             safe_error = html.escape(test_results["error"])
@@ -781,13 +782,10 @@ if submitted and user_input.strip():
                         if detailed_results:
                             st.markdown("**Test Cases:**")
                             for res in detailed_results:
-                                test_class = "test-pass" if res["status"] == "pass" else "test-fail"
-                                icon = "✅" if res["status"] == "pass" else "❌"
+                                test_class = "test-pass" if res["status"] == "pass" else "test-fail" if res["status"] == "fail" else "test-unknown"
+                                icon = "✅" if res["status"] == "pass" else "❌" if res["status"] == "fail" else "❓"
                                 safe_test = html.escape(res.get("test", ""))
-                                error_html = ""
-                                if 'error' in res:
-                                    safe_error = html.escape(res['error'])
-                                    error_html = f"<br><span style=\"color:#ff0000;\">Error: {safe_error}</span>"
+                                error_html = f"<br><span style=\"color:#ff0000;\">Error: {html.escape(res.get('error', ''))}</span>" if res.get('error') != "No error" else ""
                                 
                                 st.markdown(f'<div class="test-bubble {test_class}">'
                                            f'<span class="test-icon">{icon}</span>'
@@ -800,7 +798,7 @@ if submitted and user_input.strip():
                     # SelfDebugger Card (if debugged)
                     if "debug_explanation" in pipeline_result:
                         st.markdown('<div class="agent-container completed">', unsafe_allow_html=True)
-                        st.markdown("<h4 style='margin-bottom:0.5em;'>SelfDebugger Agent <span class='subtask-status subtask-complete'>Completed</span></h4>", unsafe_allow_html=True)
+                        st.markdown(f"<h4 style='margin-bottom:0.5em;'>SelfDebugger Agent <span class='subtask-status subtask-complete'>Completed after {test_results.get('attempts', 1)} attempt(s)</span></h4>", unsafe_allow_html=True)
                         
                         safe_explanation = html.escape(pipeline_result.get('debug_explanation', ''))
                         st.markdown(f"<b>Explanation:</b> {safe_explanation}", unsafe_allow_html=True)

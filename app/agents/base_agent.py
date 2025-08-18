@@ -49,8 +49,18 @@ def handle_errors(func):
             raise
     return wrapper
 
+class BaseAgent:
+    """Lightweight wrapper to maintain compatibility with new agents"""
+    def __init__(self, config):
+        self.manager = LocalModelManager()
+        self.config = config
+        self.manager.initialize(config)
+
+    def generate_content(self, prompt: Union[str, List[Dict[str, str]]], max_tokens: Optional[int] = None) -> str:
+        return self.manager.generate_content(prompt, max_tokens)
+
 class LocalModelManager:
-    """Singleton manager for local model"""
+    """Singleton manager for local model (original implementation)"""
     _instance = None
     _model = None
     _tokenizer = None
@@ -97,12 +107,10 @@ class LocalModelManager:
                 
                 # Add memory optimization settings with CPU offloading
                 if config.device == "cpu":
-                    # Force CPU-only
                     max_memory = None
                     device_map = None
                 else:
                     if torch.cuda.is_available():
-                        # 90% of total GPU memory in GB
                         gpu_total_mem = torch.cuda.get_device_properties(0).total_memory
                         gpu_mem_gb = int(gpu_total_mem / 1024**3 * 0.9)
                         max_memory = {0: f"{gpu_mem_gb}GB", "cpu": "32GB"}
@@ -111,7 +119,6 @@ class LocalModelManager:
                         max_memory = None
                         device_map = None
 
-                
                 self._model = AutoModelForCausalLM.from_pretrained(
                     config.model_name,
                     torch_dtype=torch_dtype,
@@ -194,11 +201,3 @@ class LocalModelManager:
             gc.collect()
         if hasattr(torch, 'cuda') and torch.cuda.is_available() and self._config.device != "cpu":
             torch.cuda.synchronize()
-
-
-
-
-
-
-
-

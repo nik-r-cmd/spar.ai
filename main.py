@@ -9,7 +9,7 @@ import logging
 from app.agents.task_understanding_agent import generate_structured_prompt
 from app.agents.subtask_distributor import agent as subtask_distributor_agent
 from app.agents.prompt_refiner import PromptRefinerAgent
-from app.agents.main_ss import SPARSystem
+from app.agents.main_ss import MainSolutionSystem
 from app.agents.base_agent import SPARConfig
 
 # Configure logging
@@ -47,7 +47,7 @@ def get_spar_system():
     global spar_system
     if spar_system is None:
         config = SPARConfig()
-        spar_system = SPARSystem(config)
+        spar_system = MainSolutionSystem(config)
     return spar_system
 
 # ---------- Individual Endpoints ----------
